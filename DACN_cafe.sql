@@ -9,17 +9,6 @@ CREATE TABLE TaiKhoan (
     MatKhau VARCHAR(255) NOT NULL COMMENT 'Mật khẩu đăng nhập (Nên được mã hóa MD5/Bcrypt)',
     vaiTro VARCHAR(50) NOT NULL COMMENT 'Vai trò người dùng (Ví dụ: Admin, NhanVien)'
 ) COMMENT 'Bảng lưu trữ thông tin xác thực đăng nhập của người dùng';
-
--- ==========================================
--- 2. BẢNG QUẢN LÝ (Quan hệ 1-1 với Tài Khoản)
--- ==========================================
-CREATE TABLE QuanLy (
-    MaQuanLy CHAR(36) PRIMARY KEY COMMENT 'Khóa chính, mã định danh quản lý (GUID)',
-    TenQuanLy VARCHAR(100) NOT NULL COMMENT 'Tên hiển thị của quản lý',
-    MaTaiKhoan CHAR(36) NOT NULL UNIQUE COMMENT 'Khóa ngoại liên kết 1-1 với bảng TaiKhoan',
-    FOREIGN KEY (MaTaiKhoan) REFERENCES TaiKhoan(MaTaiKhoan) ON DELETE CASCADE
-) COMMENT 'Bảng lưu thông tin cá nhân của cấp Quản lý';
-
 -- ==========================================
 -- 3. BẢNG NHÂN VIÊN (Quan hệ 1-1 với Tài Khoản)
 -- ==========================================
@@ -91,4 +80,4 @@ CREATE TABLE ChiTietHoaDon (
     PRIMARY KEY (maHoaDon, maDoUong) COMMENT 'Khóa chính kép gồm 2 khóa ngoại gộp lại',
     FOREIGN KEY (maHoaDon) REFERENCES HoaDon(maHoaDon) ON DELETE CASCADE,
     FOREIGN KEY (maDoUong) REFERENCES DoUong(maDoUong)
-) COMMENT 'Bảng trung gian phân giải quan hệ nhiều-nhiều, lưu chi tiết các món trong đơn';
+) COMMENT 'Bảng yếu phân giải quan hệ nhiều-nhiều, lưu chi tiết các món trong đơn';
