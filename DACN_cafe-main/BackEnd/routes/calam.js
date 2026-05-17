@@ -3,178 +3,90 @@ const router = express.Router();
 const db = require("../config/db");
 const { checkLogin, isAdmin } = require("../middleware/authMiddleware");
 
-// ==========================================
-// 1. LẤY DANH SÁCH CA LÀM (GET)
-// ==========================================
-// Admin: Xem toàn bộ quán | Nhân viên: Chỉ xem ca của mình
-router.get("/", checkLogin, async (req, res) => {
+// Lấy danh sách ca làm việc theo ngày
+router.get("/ngay/:date", async (req, res) => {
+  const { date } = req.params; // Format: YYYY-MM-DD
   try {
-    const { role, id } = req.session.user;
-    let sql = `
-            SELECT c.*, nv.HoTen 
-            FROM CaLamViec c 
-            JOIN NhanVien nv ON c.MaNhanVien = nv.MaNhanVien`;
-    let params = [];
-
-    if (role !== "Admin") {
-      sql += " WHERE nv.MaTaiKhoan = ?";
-      params.push(id);
-    }
-
-    sql += " ORDER BY c.ngayLam DESC, c.gioBatDau ASC";
-    const [rows] = await db.query(sql, params);
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================================
-// 2. ADMIN THÊM CA LÀM MỚI (POST)
-// ==========================================
-router.post("/add", checkLogin, isAdmin, async (req, res) => {
-  const { tenCa, gioBatDau, gioKetThuc, ngayLam, MaNhanVien } = req.body;
-  try {
-    const sql = `
-            INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien) 
-            VALUES (?, ?, ?, ?, 'Chưa bắt đầu', ?)`;
-    const [result] = await db.query(sql, [
-      tenCa,
-      gioBatDau,
-      gioKetThuc,
-      ngayLam,
-      MaNhanVien,
-    ]);
-    res.status(201).json({
-      message: "Admin đã thêm ca làm thành công",
-      id: result.insertId,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================================
-// 3. ADMIN SỬA THÔNG TIN CA LÀM (PUT)
-// ==========================================
-router.put("/edit/:id", checkLogin, isAdmin, async (req, res) => {
-  const { id } = req.params; // maCa
-  const { tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien } =
-    req.body;
-  try {
-    const sql = `
-            UPDATE CaLamViec 
-            SET tenCa = ?, gioBatDau = ?, gioKetThuc = ?, ngayLam = ?, trangThai = ?, MaNhanVien = ?
-            WHERE maCa = ?`;
-    const [result] = await db.query(sql, [
-      tenCa,
-      gioBatDau,
-      gioKetThuc,
-      ngayLam,
-      trangThai,
-      MaNhanVien,
-      id,
-    ]);
-
-    if (result.affectedRows === 0)
-      return res.status(404).json({ message: "Không tìm thấy ca làm" });
-    res.json({ message: "Cập nhật ca làm thành công" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================================
-// 4. XÓA/HỦY CA LÀM (Có điều kiện 3 ngày)
-// ==========================================
-router.delete("/delete/:id", checkLogin, async (req, res) => {
-  const maCa = req.params.id;
-  const { id, role } = req.session.user; // id ở đây là MaTaiKhoan từ session
-
-  try {
-    // 1. Lấy thông tin ca làm để kiểm tra ngày và quyền sở hữu
-    const [rows] = await db.query(
-      `
-            SELECT c.ngayLam, c.trangThai, nv.MaTaiKhoan 
-            FROM CaLamViec c
-            JOIN NhanVien nv ON c.MaNhanVien = nv.MaNhanVien
-            WHERE c.maCa = ?`,
-      [maCa],
+    const [caLamRows] = await db.query(
+      `SELECT c.maCa, c.tenCa, c.ngayLam, c.trangThai, nv.MaNhanVien, nv.HoTen, tk.vaiTro
+       FROM CaLamViec c
+       LEFT JOIN ChiTietCaLam ct ON c.maCa = ct.maCa
+       LEFT JOIN NhanVien nv ON ct.MaNhanVien = nv.MaNhanVien
+       LEFT JOIN TaiKhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
+       WHERE c.ngayLam = ?`,
+      [date]
     );
 
-    if (rows.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Không tìm thấy ca làm việc này." });
-    }
+    // Grouping by Ca (Sáng, Chiều, Tối)
+    const shifts = {
+      "Ca Sáng": { id: null, staff: [] },
+      "Ca Chiều": { id: null, staff: [] },
+      "Ca Tối": { id: null, staff: [] },
+    };
 
-    const caLam = rows[0];
-    const ngayLamViec = new Date(caLam.ngayLam);
-    const ngayHienTai = new Date();
-
-    // Tính toán khoảng cách ngày (milliseconds -> days)
-    const diffTime = ngayLamViec - ngayHienTai;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    // 2. KIỂM TRA ĐIỀU KIỆN
-
-    // Nếu là Nhân viên:
-    if (role !== "Admin") {
-      // Kiểm tra xem có phải ca của chính mình không
-      if (caLam.MaTaiKhoan !== id) {
-        return res
-          .status(403)
-          .json({ message: "Bạn không có quyền xóa ca làm của người khác." });
-      }
-
-      // Kiểm tra điều kiện 3 ngày
-      if (diffDays < 3) {
-        return res.status(400).json({
-          message: `Không thể hủy! Bạn chỉ được phép hủy ca trước ngày làm việc ít nhất 3 ngày. (Còn ${diffDays} ngày nữa là đến ca làm)`,
-        });
-      }
-
-      // Kiểm tra trạng thái ca
-      if (caLam.trangThai !== "Chưa bắt đầu") {
-        return res
-          .status(400)
-          .json({
-            message: "Không thể hủy ca đang thực hiện hoặc đã kết thúc.",
+    caLamRows.forEach((row) => {
+      if (shifts[row.tenCa]) {
+        shifts[row.tenCa].id = row.maCa;
+        if (row.MaNhanVien) {
+          shifts[row.tenCa].staff.push({
+             MaNhanVien: row.MaNhanVien,
+             HoTen: row.HoTen,
           });
+        }
       }
-    }
+    });
 
-    // 3. THỰC HIỆN XÓA (Admin hoặc NV thỏa mãn điều kiện)
-    await db.query("DELETE FROM CaLamViec WHERE maCa = ?", [maCa]);
-
-    res.json({ message: "Đã xóa ca làm việc thành công." });
+    res.json(shifts);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ==========================================
-// 5. NHÂN VIÊN TỰ ĐĂNG KÝ CA (POST)
-// ==========================================
-router.post("/dang-ky", checkLogin, async (req, res) => {
-  const { tenCa, gioBatDau, gioKetThuc, ngayLam } = req.body;
-  const maTaiKhoan = req.session.user.id;
-
+// Lưu thông tin ca làm việc (Thêm mới hoặc Cập nhật nhân viên trong ca)
+router.post("/luu-ca", checkLogin, isAdmin, async (req, res) => {
+  const { tenCa, ngayLam, danhSachNhanVien } = req.body;
+  
+  const connection = await db.getConnection();
   try {
-    const [nv] = await db.query(
-      "SELECT MaNhanVien FROM NhanVien WHERE MaTaiKhoan = ?",
-      [maTaiKhoan],
+    await connection.beginTransaction();
+
+    // 1. Kiểm tra xem ca làm việc này đã tồn tại trong ngày chưa
+    let [caRows] = await connection.query(
+      "SELECT maCa FROM CaLamViec WHERE tenCa = ? AND ngayLam = ?",
+      [tenCa, ngayLam]
     );
-    const maNV = nv[0].MaNhanVien;
 
-    const sql = `
-            INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien) 
-            VALUES (?, ?, ?, ?, 'Chưa bắt đầu', ?)`;
-    await db.query(sql, [tenCa, gioBatDau, gioKetThuc, ngayLam, maNV]);
+    let maCa;
+    if (caRows.length > 0) {
+      maCa = caRows[0].maCa;
+    } else {
+      // Nếu chưa có thì tạo ca mới
+      const [insertCa] = await connection.query(
+        "INSERT INTO CaLamViec (tenCa, ngayLam, trangThai) VALUES (?, ?, 'Chưa bắt đầu')",
+        [tenCa, ngayLam]
+      );
+      maCa = insertCa.insertId;
+    }
 
-    res.status(201).json({ message: "Bạn đã đăng ký ca làm thành công" });
+    // 2. Xóa sạch các nhân viên cũ trong ca này (Để cập nhật lại danh sách mới nhất)
+    await connection.query("DELETE FROM ChiTietCaLam WHERE maCa = ?", [maCa]);
+
+    // 3. Thêm danh sách nhân viên mới vào ChiTietCaLam
+    if (danhSachNhanVien && danhSachNhanVien.length > 0) {
+      const values = danhSachNhanVien.map((maNV) => [maCa, maNV]);
+      await connection.query(
+        "INSERT INTO ChiTietCaLam (maCa, MaNhanVien) VALUES ?",
+        [values]
+      );
+    }
+
+    await connection.commit();
+    res.json({ message: "Lưu ca làm việc thành công!" });
   } catch (err) {
+    await connection.rollback();
     res.status(500).json({ error: err.message });
+  } finally {
+    connection.release();
   }
 });
 

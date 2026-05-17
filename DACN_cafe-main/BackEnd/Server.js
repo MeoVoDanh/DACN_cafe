@@ -6,7 +6,7 @@ const app = express();
 const { checkLogin, isAdmin } = require("./middleware/authMiddleware");
 
 // Middleware
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json());
 app.use(express.static("public"));
 app.use(

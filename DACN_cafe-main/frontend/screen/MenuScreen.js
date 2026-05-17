@@ -10,8 +10,25 @@ import {
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 
-// NHẬN menuItems và setMenuItems từ App.js truyền xuống qua props
-export default function MenuScreen({ onBack, menuItems, setMenuItems }) {
+export default function MenuScreen({ navigation }) {
+  const [menuItems, setMenuItems] = useState([
+    { id: "1", name: "Cà phê đá truyền thống", price: 29000, icon: "coffee" },
+    { id: "2", name: "Cà phê sữa Sài Gòn", price: 32000, icon: "coffee" },
+    {
+      id: "3",
+      name: "Bạc xỉu ba tầng",
+      price: 35000,
+      icon: "glass-martini-alt",
+    },
+    { id: "4", name: "Trà đào cam sả", price: 39000, icon: "leaf" },
+    {
+      id: "5",
+      name: "Matcha đá xay kem béo",
+      price: 45000,
+      icon: "cloud-meatball",
+    },
+  ]);
+
   // Các state để quản lý form thêm món mới
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
@@ -78,7 +95,7 @@ export default function MenuScreen({ onBack, menuItems, setMenuItems }) {
     <SafeAreaView style={styles.container}>
       {/* Thanh Header chính */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate("DashboardScreen")} style={styles.backBtn}>
           <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
         </TouchableOpacity>
         <Text style={styles.title}>DANH MỤC THỰC ĐƠN MÓN</Text>

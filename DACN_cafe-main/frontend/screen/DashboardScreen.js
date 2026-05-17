@@ -9,10 +9,17 @@ import {
   StatusBar,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
+import { useDispatch } from "react-redux";
+import { logout } from "../redux/authSlice";
 
 const backgroundImage = require("../assets/coffee-bg.png");
 
-export default function DashboardScreen({ onLogout, onNavigate }) {
+export default function DashboardScreen({ navigation }) {
+  const dispatch = useDispatch();
+
+  const handleLogout = () => {
+    dispatch(logout());
+  };
   return (
     <ImageBackground
       source={backgroundImage}
@@ -45,7 +52,7 @@ export default function DashboardScreen({ onLogout, onNavigate }) {
               {/* Nút Đăng xuất bên phải - Không dùng absolute nữa */}
               <TouchableOpacity
                 style={styles.logoutBtn}
-                onPress={onLogout}
+                onPress={handleLogout}
                 activeOpacity={0.7}
               >
                 <FontAwesome5 name="sign-out-alt" size={12} color="#fff" />
@@ -58,7 +65,7 @@ export default function DashboardScreen({ onLogout, onNavigate }) {
               <TouchableOpacity
                 style={styles.button}
                 activeOpacity={0.7}
-                onPress={() => onNavigate("EMPLOYEE")}
+                onPress={() => navigation.navigate("EmployeeScreen")}
               >
                 <View style={styles.iconWrapper}>
                   <FontAwesome5 name="users" size={18} color="#fff" />
@@ -69,7 +76,7 @@ export default function DashboardScreen({ onLogout, onNavigate }) {
               <TouchableOpacity
                 style={styles.button}
                 activeOpacity={0.7}
-                onPress={() => onNavigate("SHIFT")}
+                onPress={() => navigation.navigate("ShiftScreen")}
               >
                 <View style={styles.iconWrapper}>
                   <FontAwesome5 name="calendar-check" size={18} color="#fff" />
@@ -80,7 +87,7 @@ export default function DashboardScreen({ onLogout, onNavigate }) {
               <TouchableOpacity
                 style={styles.button}
                 activeOpacity={0.7}
-                onPress={() => onNavigate("MENU")}
+                onPress={() => navigation.navigate("MenuScreen")}
               >
                 <View style={styles.iconWrapper}>
                   <FontAwesome5 name="book-open" size={18} color="#fff" />
@@ -91,7 +98,7 @@ export default function DashboardScreen({ onLogout, onNavigate }) {
               <TouchableOpacity
                 style={[styles.button, styles.buttonSpecial]}
                 activeOpacity={0.7}
-                onPress={() => onNavigate("REVENUE")}
+                onPress={() => navigation.navigate("RevenueScreen")}
               >
                 <View style={styles.iconWrapper}>
                   <FontAwesome5 name="chart-pie" size={18} color="#fff" />

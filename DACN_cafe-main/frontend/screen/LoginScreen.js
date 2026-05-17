@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,18 +6,30 @@ import {
   TextInput,
   TouchableOpacity,
   ImageBackground,
+  ActivityIndicator
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
+import { useDispatch, useSelector } from "react-redux";
+import { loginAdmin, clearError } from "../redux/authSlice";
 
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const dispatch = useDispatch();
+  const { loading, error } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    if (error) {
+      alert(error);
+      dispatch(clearError());
+    }
+  }, [error, dispatch]);
 
   const checkLogin = () => {
     if (!username.trim() || !password) {
       return alert("Vui lòng điền đầy đủ Tên đăng nhập và Mật khẩu nhé ní!");
     }
-    onLogin(username.trim(), password);
+    dispatch(loginAdmin({ username: username.trim(), password }));
   };
 
   return (
@@ -83,14 +95,21 @@ export default function LoginScreen({ onLogin }) {
             style={styles.btn}
             onPress={checkLogin}
             activeOpacity={0.8}
+            disabled={loading}
           >
-            <FontAwesome5
-              name="sign-in-alt"
-              size={14}
-              color="#fff"
-              style={{ marginRight: 8 }}
-            />
-            <Text style={styles.btnText}>Đăng nhập hệ thống</Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <FontAwesome5
+                  name="sign-in-alt"
+                  size={14}
+                  color="#fff"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.btnText}>Đăng nhập hệ thống</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>

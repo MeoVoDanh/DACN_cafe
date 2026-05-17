@@ -16,11 +16,8 @@ router.post("/login", async (req, res) => {
 
     const user = users[0];
 
-    // Kiểm tra mật khẩu (Giả sử bạn dùng bcrypt để băm mật khẩu)
-    // Nếu bạn đang lưu text thuần (không khuyến khích), hãy dùng: if (MatKhau !== user.MatKhau)
-    const isMatch = await bcrypt.compare(MatKhau, user.MatKhau);
-    
-    if (!isMatch) {
+    // Kiểm tra mật khẩu (Hiện tại database đang lưu text thuần)
+    if (MatKhau !== user.MatKhau) {
       return res.status(401).json({ message: "Mật khẩu không chính xác" });
     }
 

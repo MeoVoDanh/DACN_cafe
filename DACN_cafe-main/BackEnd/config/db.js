@@ -4,7 +4,7 @@ const pool = mysql.createPool({
   host: "localhost",
   port: "3306",
   user: "root",
-  password: "123456",
+  password: "080705Trong",
   database: "DACN_cafe",
   waitForConnections: true,
   connectionLimit: 10, // Giới hạn 10 kết nối cùng lúc để tránh quá tải DB

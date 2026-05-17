@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,11 +7,23 @@ import {
   SafeAreaView,
   ScrollView,
   TextInput,
+  ActivityIndicator,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
+import { useSelector, useDispatch } from "react-redux";
+import { fetchAllEmployees } from "../redux/DS_employee";
+import axios from "axios";
 
-export default function ShiftScreen({ onBack }) {
-  const [currentDate, setCurrentDate] = useState(new Date("2026-05-16"));
+export default function ShiftScreen({ navigation }) {
+  const dispatch = useDispatch();
+  const rawAccounts = useSelector((state) => state.dsEmployee.items);
+  const allEmployeesInShop = rawAccounts.filter((emp) => emp.TrangThai !== "Đã nghỉ việc");
+
+  useEffect(() => {
+    dispatch(fetchAllEmployees());
+  }, [dispatch]);
+
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   const [inputDay, setInputDay] = useState(String(currentDate.getDate()));
@@ -20,44 +32,34 @@ export default function ShiftScreen({ onBack }) {
   );
   const [inputYear, setInputYear] = useState(String(currentDate.getFullYear()));
 
-  const allEmployeesInShop = [
-    "Nguyễn Văn A",
-    "Trần Thị B",
-    "Lê Văn C",
-    "Phạm Văn D",
-    "Hoàng Thị E",
-    "Tạp vụ F",
-    "Pha chế G",
-  ];
+  const [currentShifts, setCurrentShifts] = useState([
+    { id: "Ca Sáng", name: "Ca Sáng (06:00 - 12:00)", staff: [] },
+    { id: "Ca Chiều", name: "Ca Chiều (12:00 - 18:00)", staff: [] },
+    { id: "Ca Tối", name: "Ca Tối (18:00 - 23:00)", staff: [] },
+  ]);
 
-  const [shiftDatabase, setShiftDatabase] = useState({
-    "16/05/2026": [
-      {
-        id: 1,
-        name: "Ca Sáng (06:00 - 12:00)",
-        staff: ["Nguyễn Văn A", "Lê Văn C"],
-      },
-      { id: 2, name: "Ca Chiều (12:00 - 18:00)", staff: ["Trần Thị B"] },
-      {
-        id: 3,
-        name: "Ca Tối (18:00 - 23:00)",
-        staff: ["Phạm Văn D", "Hoàng Thị E"],
-      },
-    ],
-    "17/05/2026": [
-      {
-        id: 1,
-        name: "Ca Sáng (06:00 - 12:00)",
-        staff: ["Trần Thị B", "Hoàng Thị E"],
-      },
-      { id: 2, name: "Ca Chiều (12:00 - 18:00)", staff: ["Nguyễn Văn A"] },
-      {
-        id: 3,
-        name: "Ca Tối (18:00 - 23:00)",
-        staff: ["Lê Văn C", "Tạp vụ F"],
-      },
-    ],
-  });
+  const getDbDateStr = (date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+
+  const fetchShiftsForDate = async (date) => {
+    const dateStr = getDbDateStr(date);
+    try {
+      const response = await axios.get(`http://localhost:1234/calam/ngay/${dateStr}`, { withCredentials: true });
+      const data = response.data;
+      setCurrentShifts([
+        { id: "Ca Sáng", name: "Ca Sáng (06:00 - 12:00)", staff: data["Ca Sáng"]?.staff || [] },
+        { id: "Ca Chiều", name: "Ca Chiều (12:00 - 18:00)", staff: data["Ca Chiều"]?.staff || [] },
+        { id: "Ca Tối", name: "Ca Tối (18:00 - 23:00)", staff: data["Ca Tối"]?.staff || [] },
+      ]);
+    } catch (err) {
+      console.log("Fetch shift error:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchShiftsForDate(currentDate);
+  }, [currentDate]);
 
   const [editingShiftId, setEditingShiftId] = useState(null);
   const [tempStaffList, setTempStaffList] = useState([]);
@@ -137,48 +139,42 @@ export default function ShiftScreen({ onBack }) {
 
   const startEditing = (shiftId, currentStaffArray) => {
     setEditingShiftId(shiftId);
-    setTempStaffList([...currentStaffArray]);
+    setTempStaffList([...currentStaffArray]); // currentStaffArray is array of {MaNhanVien, HoTen}
   };
 
-  const addStaffToShift = (staffName) => {
-    if (tempStaffList.includes(staffName))
+  const addStaffToShift = (emp) => {
+    if (tempStaffList.find(s => s.MaNhanVien === emp.MaNhanVien))
       return alert("Nhân viên này đã có trong ca rồi ní!");
-    setTempStaffList([...tempStaffList, staffName]);
+    setTempStaffList([...tempStaffList, { MaNhanVien: emp.MaNhanVien, HoTen: emp.HoTen }]);
   };
 
-  const removeStaffFromShift = (staffName) => {
-    setTempStaffList(tempStaffList.filter((name) => name !== staffName));
+  const removeStaffFromShift = (maNV) => {
+    setTempStaffList(tempStaffList.filter((s) => s.MaNhanVien !== maNV));
   };
 
-  const saveShiftChanges = (shiftId) => {
-    const dateKey = formatDateString(currentDate);
-    const currentDayShifts = shiftDatabase[dateKey] || [
-      { id: 1, name: "Ca Sáng (06:00 - 12:00)", staff: [] },
-      { id: 2, name: "Ca Chiều (12:00 - 18:00)", staff: [] },
-      { id: 3, name: "Ca Tối (18:00 - 23:00)", staff: [] },
-    ];
-
-    const updatedShifts = currentDayShifts.map((shift) => {
-      if (shift.id === shiftId) return { ...shift, staff: tempStaffList };
-      return shift;
-    });
-
-    setShiftDatabase({ ...shiftDatabase, [dateKey]: updatedShifts });
-    setEditingShiftId(null);
+  const saveShiftChanges = async (shiftId) => {
+    const ngayLam = getDbDateStr(currentDate);
+    const danhSachNhanVien = tempStaffList.map((s) => s.MaNhanVien);
+    
+    try {
+      await axios.post(
+        `http://localhost:1234/calam/luu-ca`,
+        { tenCa: shiftId, ngayLam, danhSachNhanVien },
+        { withCredentials: true }
+      );
+      alert("Lưu lịch ca thành công!");
+      fetchShiftsForDate(currentDate);
+      setEditingShiftId(null);
+    } catch (err) {
+      alert("Lỗi khi lưu ca: " + (err.response?.data?.error || err.message));
+    }
   };
-
-  const dateKey = formatDateString(currentDate);
-  const currentShifts = shiftDatabase[dateKey] || [
-    { id: 1, name: "Ca Sáng (06:00 - 12:00)", staff: [] },
-    { id: 2, name: "Ca Chiều (12:00 - 18:00)", staff: [] },
-    { id: 3, name: "Ca Tối (18:00 - 23:00)", staff: [] },
-  ];
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Header chính */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate("DashboardScreen")} style={styles.backBtn}>
           <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
         </TouchableOpacity>
         <Text style={styles.title}>LỊCH PHÂN CA TRỰC</Text>
@@ -369,12 +365,12 @@ export default function ShiftScreen({ onBack }) {
                         Ca trực đang trống...
                       </Text>
                     ) : (
-                      tempStaffList.map((name) => (
-                        <View key={name} style={styles.staffChip}>
-                          <Text style={styles.chipText}>{name}</Text>
+                      tempStaffList.map((emp) => (
+                        <View key={emp.MaNhanVien} style={styles.staffChip}>
+                          <Text style={styles.chipText}>{emp.HoTen}</Text>
                           <TouchableOpacity
                             style={styles.deleteChipBtn}
-                            onPress={() => removeStaffFromShift(name)}
+                            onPress={() => removeStaffFromShift(emp.MaNhanVien)}
                           >
                             <FontAwesome5
                               name="times-circle"
@@ -396,32 +392,32 @@ export default function ShiftScreen({ onBack }) {
                     style={styles.horizontalSlider}
                     contentContainerStyle={{ paddingRight: 20 }}
                   >
-                    {allEmployeesInShop.map((name) => (
+                    {allEmployeesInShop.map((emp) => (
                       <TouchableOpacity
-                        key={name}
+                        key={emp.MaNhanVien}
                         style={[
                           styles.sliderItem,
-                          tempStaffList.includes(name) &&
+                          tempStaffList.find(s => s.MaNhanVien === emp.MaNhanVien) &&
                             styles.sliderItemDisabled,
                         ]}
-                        onPress={() => addStaffToShift(name)}
+                        onPress={() => addStaffToShift(emp)}
                         activeOpacity={0.7}
                       >
                         <FontAwesome5
                           name="plus"
                           size={10}
                           color={
-                            tempStaffList.includes(name) ? "#aaa" : "#4b3621"
+                            tempStaffList.find(s => s.MaNhanVien === emp.MaNhanVien) ? "#aaa" : "#4b3621"
                           }
                           style={{ marginRight: 6 }}
                         />
                         <Text
                           style={[
                             styles.sliderItemText,
-                            tempStaffList.includes(name) && { color: "#aaa" },
+                            tempStaffList.find(s => s.MaNhanVien === emp.MaNhanVien) && { color: "#aaa" },
                           ]}
                         >
-                          {name}
+                          {emp.HoTen}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -459,7 +455,7 @@ export default function ShiftScreen({ onBack }) {
                   ]}
                 >
                   {shift.staff.length > 0
-                    ? shift.staff.join(", ")
+                    ? shift.staff.map(s => s.HoTen).join(", ")
                     : "Chưa xếp lịch trực"}
                 </Text>
               )}
