@@ -65,7 +65,7 @@ export default function DashboardScreen({ navigation }) {
               <TouchableOpacity
                 style={styles.button}
                 activeOpacity={0.7}
-                onPress={() => navigation.navigate("EmployeeScreen")}
+                onPress={() => navigation.navigate("EmployeeListScreen")}
               >
                 <View style={styles.iconWrapper}>
                   <FontAwesome5 name="users" size={18} color="#fff" />

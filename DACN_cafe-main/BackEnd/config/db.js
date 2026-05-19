@@ -1,14 +1,16 @@
-var mysql = require("mysql2");
+import mysql from "mysql2/promise";
+import dotenv from "dotenv";
 
-const pool = mysql.createPool({
-  host: "localhost",
-  port: "3306",
-  user: "root",
-  password: "080705Trong",
-  database: "DACN_cafe",
+dotenv.config();
+
+const db = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
   waitForConnections: true,
-  connectionLimit: 10, // Giới hạn 10 kết nối cùng lúc để tránh quá tải DB
+  connectionLimit: 10,
   queueLimit: 0,
 });
 
-module.exports = pool.promise(); // Sử dụng promise để dùng async/await cho sạch code
+export default db;

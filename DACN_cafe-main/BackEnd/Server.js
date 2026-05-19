@@ -1,45 +1,36 @@
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const session = require("express-session");
+import dotenv from "dotenv";
+import express from "express";
+import cors from "cors";
+import authRoutes from "./routes/auth.js";
+import douongRoutes from "./routes/douong.js";
+import nhanvienRoutes from "./routes/nhanvien.js";
+import calamRoutes from "./routes/calam.js";
+import hoadonRoutes from "./routes/hoadon.js";
+import doanhthuRoutes from "./routes/doanhthu.js";
+import canhanRoutes from "./routes/canhan.js";
+
+dotenv.config();
 const app = express();
-const { checkLogin, isAdmin } = require("./middleware/authMiddleware");
 
-// Middleware
-app.use(cors({ origin: true, credentials: true }));
-app.use(bodyParser.json());
-app.use(express.static("public"));
-app.use(
-  session({
-    secret: "cpokqwoeqjeq", // Dùng để mã hóa session ID
-    resave: false,
-    saveUninitialized: true,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 }, // Session tồn tại trong 1 ngày
-  }),
-);
+app.use(cors());
+app.use(express.json());
 
-// Đăng ký các Route
-const nhanvienRouter = require("./routes/nhanvien");
-const douongRouter = require("./routes/douong");
-const calamRouter = require("./routes/calam");
-const doanhthuRouter = require("./routes/doanhthu");
-const authRouter = require("./routes/auth");
-const hoadonRouter = require("./routes/hoadon");
-const canhanRouter = require("./routes/canhan");
+app.get("/", (req, res) => {
+  res.json({
+    message: "DACN Cafe API đang chạy",
+  });
+});
 
-//Tính năng chung
-app.use("/auth", authRouter);
-app.use("/calam", calamRouter);
-//quản lý
-app.use("/doanhthu", checkLogin, isAdmin, doanhthuRouter);
-app.use("/nhanvien", checkLogin, isAdmin, nhanvienRouter);
-app.use("/douong", checkLogin, isAdmin, douongRouter);
+app.use("/api/auth", authRoutes);
+app.use("/api/douong", douongRoutes);
+app.use("/api/nhanvien", nhanvienRoutes);
+app.use("/api/calam", calamRoutes);
+app.use("/api/hoadon", hoadonRoutes);
+app.use("/api/doanhthu", doanhthuRoutes);
+app.use("/api/canhan", canhanRoutes);
 
-//nhân viên
-app.use("/hoadon", checkLogin, hoadonRouter);
-app.use("/canhan", checkLogin, canhanRouter);
+const PORT = process.env.PORT || 3000;
 
-const PORT = 1234;
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server đang chạy tại http://localhost:${PORT}`);
 });

@@ -1,76 +1,82 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import api from "./api";
 
-// Thunk action để gọi API đăng nhập kiểm tra với SQL thông qua backend
-export const loginAdmin = createAsyncThunk(
-  'auth/loginAdmin',
-  async ({ username, password }, { rejectWithValue }) => {
+const initialState = {
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
+};
+
+export const loginUser = createAsyncThunk(
+  "auth/loginUser",
+  async ({ tenDangNhap, matKhau }, thunkAPI) => {
     try {
-      // Thay đổi localhost thành IP máy tính nếu chạy trên thiết bị thật (VD: http://192.168.1.x:1234/auth/login)
-      const response = await axios.post(
-        "http://localhost:1234/auth/login",
-        {
-          tenDangNhap: username,
-          MatKhau: password,
-        },
-        { withCredentials: true }
-      );
-      
-      const user = response.data.user;
-      
-      // So sánh vai trò (trong SQL là vaiTro)
-      if (user && user.role === "Admin") {
-        return user;
-      } else {
-        return rejectWithValue("Chỉ tài khoản Admin mới được phép đăng nhập vào hệ thống!");
-      }
+      const response = await api.post("/auth/login", {
+        tenDangNhap,
+        matKhau,
+      });
+
+      const { token, user } = response.data;
+
+      await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem("user", JSON.stringify(user));
+
+      return response.data;
     } catch (error) {
-      if (error.response && error.response.data && error.response.data.message) {
-        return rejectWithValue(`Đăng nhập thất bại: ${error.response.data.message}`);
-      } else {
-        return rejectWithValue("Không thể kết nối đến máy chủ backend.");
-      }
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Không thể kết nối với backend";
+
+      return thunkAPI.rejectWithValue(message);
     }
-  }
+  },
 );
 
 const authSlice = createSlice({
-  name: 'auth',
-  initialState: {
-    user: null,
-    isAuthenticated: false,
-    loading: false,
-    error: null,
-  },
+  name: "auth",
+  initialState,
   reducers: {
-    logout: (state) => {
-      state.user = null;
-      state.isAuthenticated = false;
-      state.error = null;
-    },
     clearError: (state) => {
       state.error = null;
-    }
+    },
+
+    logout: (state) => {
+      state.user = null;
+      state.token = null;
+      state.isAuthenticated = false;
+      state.isLoading = false;
+      state.error = null;
+
+      AsyncStorage.removeItem("token");
+      AsyncStorage.removeItem("user");
+    },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loginAdmin.pending, (state) => {
-        state.loading = true;
+      .addCase(loginUser.pending, (state) => {
+        state.isLoading = true;
         state.error = null;
       })
-      .addCase(loginAdmin.fulfilled, (state, action) => {
-        state.loading = false;
+
+      .addCase(loginUser.fulfilled, (state, action) => {
+        state.isLoading = false;
         state.isAuthenticated = true;
-        state.user = action.payload;
+        state.token = action.payload.token;
+        state.user = action.payload.user;
         state.error = null;
       })
-      .addCase(loginAdmin.rejected, (state, action) => {
-        state.loading = false;
+
+      .addCase(loginUser.rejected, (state, action) => {
+        state.isLoading = false;
         state.isAuthenticated = false;
         state.error = action.payload;
       });
   },
 });
 
-export const { logout, clearError } = authSlice.actions;
+export const { clearError, logout } = authSlice.actions;
 export default authSlice.reducer;

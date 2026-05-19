@@ -1,14 +1,11 @@
-import { configureStore } from '@reduxjs/toolkit';
-import dsEmployeeReducer from './DS_employee';
-import employeeReducer from './employee';
-import authReducer from './authSlice';
+import { configureStore } from "@reduxjs/toolkit";
+import authReducer from "./authSlice";
+import employeeReducer from "./employeeSlice";
 
-const store = configureStore({
+export const store = configureStore({
   reducer: {
-    dsEmployee: dsEmployeeReducer, // Key này phải khớp với state.dsEmployee
-    employee: employeeReducer,     // Key này phải khớp với state.employee
-    auth: authReducer,             // State quản lý đăng nhập xác thực
+    auth: authReducer,
+    employee: employeeReducer,
+    // dsEmployee: dsEmployeeReducer,
   },
 });
-
-export default store;

@@ -1,93 +1,52 @@
-const express = require("express");
+import express from "express";
+import {
+  createCaLam,
+  dangKyCaLam,
+  deleteCaLam,
+  getAllCaLam,
+  getCaLamById,
+  getCaLamConTrong,
+  huyDangKyCaLam,
+  updateCaLam,
+} from "../controllers/calamController.js";
+import { authorizeRoles, verifyToken } from "../middleware/authMiddleware.js";
+
 const router = express.Router();
-const db = require("../config/db");
-const { checkLogin, isAdmin } = require("../middleware/authMiddleware");
 
-// Lấy danh sách ca làm việc theo ngày
-router.get("/ngay/:date", async (req, res) => {
-  const { date } = req.params; // Format: YYYY-MM-DD
-  try {
-    const [caLamRows] = await db.query(
-      `SELECT c.maCa, c.tenCa, c.ngayLam, c.trangThai, nv.MaNhanVien, nv.HoTen, tk.vaiTro
-       FROM CaLamViec c
-       LEFT JOIN ChiTietCaLam ct ON c.maCa = ct.maCa
-       LEFT JOIN NhanVien nv ON ct.MaNhanVien = nv.MaNhanVien
-       LEFT JOIN TaiKhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
-       WHERE c.ngayLam = ?`,
-      [date]
-    );
+router.get(
+  "/con-trong",
+  verifyToken,
+  authorizeRoles("Admin", "NhanVien"),
+  getCaLamConTrong,
+);
 
-    // Grouping by Ca (Sáng, Chiều, Tối)
-    const shifts = {
-      "Ca Sáng": { id: null, staff: [] },
-      "Ca Chiều": { id: null, staff: [] },
-      "Ca Tối": { id: null, staff: [] },
-    };
+router.get("/", verifyToken, authorizeRoles("Admin"), getAllCaLam);
 
-    caLamRows.forEach((row) => {
-      if (shifts[row.tenCa]) {
-        shifts[row.tenCa].id = row.maCa;
-        if (row.MaNhanVien) {
-          shifts[row.tenCa].staff.push({
-             MaNhanVien: row.MaNhanVien,
-             HoTen: row.HoTen,
-          });
-        }
-      }
-    });
+router.get(
+  "/:maCa",
+  verifyToken,
+  authorizeRoles("Admin", "NhanVien"),
+  getCaLamById,
+);
 
-    res.json(shifts);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+router.post("/", verifyToken, authorizeRoles("Admin"), createCaLam);
 
-// Lưu thông tin ca làm việc (Thêm mới hoặc Cập nhật nhân viên trong ca)
-router.post("/luu-ca", checkLogin, isAdmin, async (req, res) => {
-  const { tenCa, ngayLam, danhSachNhanVien } = req.body;
-  
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
+router.patch(
+  "/:maCa/dang-ky",
+  verifyToken,
+  authorizeRoles("NhanVien"),
+  dangKyCaLam,
+);
 
-    // 1. Kiểm tra xem ca làm việc này đã tồn tại trong ngày chưa
-    let [caRows] = await connection.query(
-      "SELECT maCa FROM CaLamViec WHERE tenCa = ? AND ngayLam = ?",
-      [tenCa, ngayLam]
-    );
+router.patch(
+  "/:maCa/huy-dang-ky",
+  verifyToken,
+  authorizeRoles("NhanVien"),
+  huyDangKyCaLam,
+);
 
-    let maCa;
-    if (caRows.length > 0) {
-      maCa = caRows[0].maCa;
-    } else {
-      // Nếu chưa có thì tạo ca mới
-      const [insertCa] = await connection.query(
-        "INSERT INTO CaLamViec (tenCa, ngayLam, trangThai) VALUES (?, ?, 'Chưa bắt đầu')",
-        [tenCa, ngayLam]
-      );
-      maCa = insertCa.insertId;
-    }
+router.put("/:maCa", verifyToken, authorizeRoles("Admin"), updateCaLam);
 
-    // 2. Xóa sạch các nhân viên cũ trong ca này (Để cập nhật lại danh sách mới nhất)
-    await connection.query("DELETE FROM ChiTietCaLam WHERE maCa = ?", [maCa]);
+router.delete("/:maCa", verifyToken, authorizeRoles("Admin"), deleteCaLam);
 
-    // 3. Thêm danh sách nhân viên mới vào ChiTietCaLam
-    if (danhSachNhanVien && danhSachNhanVien.length > 0) {
-      const values = danhSachNhanVien.map((maNV) => [maCa, maNV]);
-      await connection.query(
-        "INSERT INTO ChiTietCaLam (maCa, MaNhanVien) VALUES ?",
-        [values]
-      );
-    }
-
-    await connection.commit();
-    res.json({ message: "Lưu ca làm việc thành công!" });
-  } catch (err) {
-    await connection.rollback();
-    res.status(500).json({ error: err.message });
-  } finally {
-    connection.release();
-  }
-});
-
-module.exports = router;
+export default router;

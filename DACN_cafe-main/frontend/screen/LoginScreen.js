@@ -6,17 +6,19 @@ import {
   TextInput,
   TouchableOpacity,
   ImageBackground,
-  ActivityIndicator
+  ActivityIndicator,
 } from "react-native";
-import { FontAwesome5 } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
-import { loginAdmin, clearError } from "../redux/authSlice";
+import { loginUser, clearError } from "../redux/authSlice";
+import { FontAwesome5 } from "@expo/vector-icons";
 
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+
   const dispatch = useDispatch();
-  const { loading, error } = useSelector((state) => state.auth);
+
+  const { isLoading, error, user } = useSelector((state) => state.auth);
 
   useEffect(() => {
     if (error) {
@@ -25,11 +27,27 @@ export default function LoginScreen() {
     }
   }, [error, dispatch]);
 
+  // useEffect(() => {
+  //   if (user) {
+  //     if (user.vaiTro === "Admin") {
+  //       navigation.replace("DashboardScreen");
+  //     } else {
+  //       navigation.replace("NhanVienHome");
+  //     }
+  //   }
+  // }, [user, navigation]);
+
   const checkLogin = () => {
     if (!username.trim() || !password) {
       return alert("Vui lòng điền đầy đủ Tên đăng nhập và Mật khẩu nhé ní!");
     }
-    dispatch(loginAdmin({ username: username.trim(), password }));
+
+    dispatch(
+      loginUser({
+        tenDangNhap: username.trim(),
+        matKhau: password,
+      }),
+    );
   };
 
   return (
@@ -38,19 +56,18 @@ export default function LoginScreen() {
       style={styles.container}
       resizeMode="cover"
     >
-      {/* Lớp phủ mờ nhẹ toàn màn hình giúp Form đăng nhập nổi bật và dễ nhìn hơn */}
       <View style={styles.overlayContainer}>
-        {/* Hộp card chứa Form đăng nhập */}
         <View style={styles.card}>
           <View style={styles.logoCircle}>
             <FontAwesome5 name="store" size={24} color="#fff" />
           </View>
+
           <Text style={styles.brand}>CAFE MANAGEMENT</Text>
           <Text style={styles.subTitle}>HỆ THỐNG ĐĂNG NHẬP NỘI BỘ</Text>
 
-          {/* Ô nhập Tên Đăng Nhập */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Tên đăng nhập</Text>
+
             <View style={styles.inputBox}>
               <FontAwesome5
                 name="user"
@@ -58,6 +75,7 @@ export default function LoginScreen() {
                 color="#8d6e63"
                 style={{ marginRight: 10 }}
               />
+
               <TextInput
                 style={styles.input}
                 placeholder="Nhập username..."
@@ -69,9 +87,9 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Ô nhập Mật Khẩu */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mật khẩu bảo mật</Text>
+
             <View style={styles.inputBox}>
               <FontAwesome5
                 name="lock"
@@ -79,6 +97,7 @@ export default function LoginScreen() {
                 color="#8d6e63"
                 style={{ marginRight: 10 }}
               />
+
               <TextInput
                 style={styles.input}
                 placeholder="Nhập mật khẩu..."
@@ -90,14 +109,13 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          {/* Nút bấm Đăng Nhập */}
           <TouchableOpacity
             style={styles.btn}
             onPress={checkLogin}
             activeOpacity={0.8}
-            disabled={loading}
+            disabled={isLoading}
           >
-            {loading ? (
+            {isLoading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <>
@@ -107,6 +125,7 @@ export default function LoginScreen() {
                   color="#fff"
                   style={{ marginRight: 8 }}
                 />
+
                 <Text style={styles.btnText}>Đăng nhập hệ thống</Text>
               </>
             )}
@@ -118,23 +137,20 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  // Ép ảnh nền trải rộng phủ kín 100% màn hình thiết bị
   container: {
     flex: 1,
     width: "100%",
     height: "100%",
   },
 
-  // Vùng đệm căn giữa card đăng nhập và tạo hiệu ứng mờ nhẹ lên ảnh nền
   overlayContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.15)", // Độ mờ nền đen (tăng giảm tùy thích)
+    backgroundColor: "rgba(0, 0, 0, 0.15)",
   },
 
-  // Tấm thẻ đăng nhập trắng tinh tế, hơi mờ nhẹ đổ bóng sang trọng
   card: {
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     width: "100%",
@@ -160,6 +176,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 12,
   },
+
   brand: {
     fontSize: 18,
     fontWeight: "bold",
@@ -167,6 +184,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: 0.5,
   },
+
   subTitle: {
     fontSize: 10,
     fontWeight: "bold",
@@ -176,13 +194,18 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     letterSpacing: 0.5,
   },
-  inputGroup: { marginBottom: 18 },
+
+  inputGroup: {
+    marginBottom: 18,
+  },
+
   label: {
     fontSize: 12,
     fontWeight: "bold",
     color: "#4b3621",
     marginBottom: 6,
   },
+
   inputBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -192,6 +215,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff8f0",
     paddingHorizontal: 12,
   },
+
   input: {
     flex: 1,
     paddingVertical: 10,
@@ -200,6 +224,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     outlineStyle: "none",
   },
+
   btn: {
     flexDirection: "row",
     backgroundColor: "#4b3621",
@@ -209,5 +234,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 8,
   },
-  btnText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+
+  btnText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
 });
