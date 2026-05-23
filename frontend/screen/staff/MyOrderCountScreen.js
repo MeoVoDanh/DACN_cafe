@@ -6,12 +6,13 @@ import {
   ActivityIndicator,
   SafeAreaView,
   FlatList,
+  Platform,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchInvoices } from "../../redux/invoiceSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 
-export default function MyOrderCountScreen() {
+export default function MyOrderCountScreen({ navigation }) {
   const dispatch = useDispatch();
 
   const { invoices, isLoading } = useSelector((state) => state.invoice);
@@ -59,9 +60,17 @@ export default function MyOrderCountScreen() {
     );
   }
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Đơn đã thực hiện</Text>
+  const renderHeader = () => (
+    <>
+      <View style={styles.headerBox}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("EmployeeDashboardScreen")}
+          style={styles.backBtn}
+        >
+          <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Đơn đã thực hiện</Text>
+      </View>
 
       <View style={styles.statsGrid}>
         <StatCard
@@ -94,11 +103,16 @@ export default function MyOrderCountScreen() {
       </View>
 
       <Text style={styles.sectionTitle}>Danh sách đơn của tôi</Text>
+    </>
+  );
 
+  return (
+    <SafeAreaView style={styles.container}>
       <FlatList
         data={myInvoices}
         keyExtractor={(item) => item.maHoaDon.toString()}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={renderHeader}
         ListEmptyComponent={
           <Text style={styles.emptyText}>Bạn chưa thực hiện đơn nào</Text>
         }
@@ -146,13 +160,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f1e9",
     padding: 16,
+    height: Platform.OS === "web" ? "100vh" : "100%",
+    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+    overflow: "hidden",
+  },
+
+  headerBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
 
   title: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#4b3621",
-    marginBottom: 16,
   },
 
   statsGrid: {

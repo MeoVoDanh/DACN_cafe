@@ -280,3 +280,88 @@ export const deleteCaLamService = async (maCa) => {
     data: { message: "Xóa ca làm thành công" },
   };
 };
+
+export const getCaLamByNgayService = async (ngayLam) => {
+  const [rows] = await db.query(
+    `
+    SELECT 
+      clv.maCa,
+      clv.tenCa,
+      clv.gioBatDau,
+      clv.gioKetThuc,
+      clv.ngayLam,
+      clv.trangThai,
+      clv.MaNhanVien,
+      clv.ghiChu,
+      nv.HoTen
+    FROM CaLamViec clv
+    LEFT JOIN NhanVien nv ON clv.MaNhanVien = nv.MaNhanVien
+    WHERE clv.ngayLam = ?
+    ORDER BY clv.gioBatDau ASC
+    `,
+    [ngayLam],
+  );
+
+  return {
+    statusCode: 200,
+    data: rows,
+  };
+};
+
+export const saveCaLamByNgayService = async (ngayLam, shiftsData) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Delete all existing shifts for that date
+    await connection.query("DELETE FROM CaLamViec WHERE ngayLam = ?", [ngayLam]);
+
+    // 2. Define times for each fixed shift
+    const shiftTimes = {
+      "Ca Sáng": { start: "07:00:00", end: "12:00:00" },
+      "Ca Chiều": { start: "12:00:00", end: "17:00:00" },
+      "Ca Tối": { start: "17:00:00", end: "22:00:00" },
+    };
+
+    // 3. Insert new shifts
+    for (const shift of shiftsData) {
+      const { tenCa, employeeIds } = shift;
+      const times = shiftTimes[tenCa] || { start: "00:00:00", end: "00:00:00" };
+      const gioBatDau = `${ngayLam} ${times.start}`;
+      const gioKetThuc = `${ngayLam} ${times.end}`;
+
+      if (!employeeIds || employeeIds.length === 0) {
+        // Shift has no employees assigned
+        await connection.query(
+          `
+          INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien)
+          VALUES (?, ?, ?, ?, 'Chưa có nhân viên', NULL)
+          `,
+          [tenCa, gioBatDau, gioKetThuc, ngayLam],
+        );
+      } else {
+        // Shift has employees assigned, create one record per employee
+        for (const empId of employeeIds) {
+          await connection.query(
+            `
+            INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien)
+            VALUES (?, ?, ?, ?, 'Đã đăng ký', ?)
+            `,
+            [tenCa, gioBatDau, gioKetThuc, ngayLam, empId],
+          );
+        }
+      }
+    }
+
+    await connection.commit();
+    return {
+      statusCode: 200,
+      data: { message: "Lưu ca làm việc thành công" },
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};

@@ -8,6 +8,8 @@ export const getAllNhanVienService = async () => {
       nv.HoTen,
       nv.Email,
       nv.SDT,
+      nv.SoCCCD,
+      nv.TrangThai,
       tk.MaTaiKhoan,
       tk.tenDangNhap,
       tk.vaiTro
@@ -30,6 +32,8 @@ export const getNhanVienByIdService = async (maNhanVien) => {
       nv.HoTen,
       nv.Email,
       nv.SDT,
+      nv.SoCCCD,
+      nv.TrangThai,
       tk.MaTaiKhoan,
       tk.tenDangNhap,
       tk.vaiTro
@@ -54,7 +58,7 @@ export const getNhanVienByIdService = async (maNhanVien) => {
 };
 
 export const createNhanVienService = async (data) => {
-  const { HoTen, Email, SDT, tenDangNhap, MatKhau, vaiTro } = data;
+  const { HoTen, Email, SDT, SoCCCD, TrangThai, tenDangNhap, MatKhau, vaiTro } = data;
 
   const connection = await db.getConnection();
 
@@ -75,10 +79,10 @@ export const createNhanVienService = async (data) => {
 
     const [employeeResult] = await connection.query(
       `
-      INSERT INTO NhanVien (HoTen, Email, SDT, MaTaiKhoan)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO NhanVien (HoTen, Email, SDT, SoCCCD, TrangThai, MaTaiKhoan)
+      VALUES (?, ?, ?, ?, ?, ?)
       `,
-      [HoTen, Email || null, SDT || null, maTaiKhoan],
+      [HoTen, Email || null, SDT || null, SoCCCD || null, "Đang làm việc", maTaiKhoan],
     );
 
     await connection.commit();
@@ -108,7 +112,7 @@ export const createNhanVienService = async (data) => {
 };
 
 export const updateNhanVienService = async (maNhanVien, data) => {
-  const { HoTen, Email, SDT, vaiTro } = data;
+  const { HoTen, Email, SDT, SoCCCD, TrangThai, vaiTro } = data;
 
   const [result] = await db.query(
     `
@@ -118,10 +122,20 @@ export const updateNhanVienService = async (maNhanVien, data) => {
       nv.HoTen = ?,
       nv.Email = ?,
       nv.SDT = ?,
+      nv.SoCCCD = ?,
+      nv.TrangThai = ?,
       tk.vaiTro = ?
     WHERE nv.MaNhanVien = ?
     `,
-    [HoTen, Email || null, SDT || null, vaiTro || "NhanVien", maNhanVien],
+    [
+      HoTen,
+      Email || null,
+      SDT || null,
+      SoCCCD || null,
+      TrangThai || "Đang làm việc",
+      vaiTro || "NhanVien",
+      maNhanVien,
+    ],
   );
 
   if (result.affectedRows === 0) {

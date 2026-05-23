@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   SafeAreaView,
+  Platform,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -18,7 +19,7 @@ import {
 } from "../../redux/employeeShiftSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 
-export default function EmployeeShiftScreen() {
+export default function EmployeeShiftScreen({ navigation }) {
   const dispatch = useDispatch();
 
   const [tab, setTab] = useState("available");
@@ -136,7 +137,15 @@ export default function EmployeeShiftScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Quản lý ca làm</Text>
+      <View style={styles.headerBox}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("EmployeeDashboardScreen")}
+          style={styles.backBtn}
+        >
+          <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Quản lý ca làm</Text>
+      </View>
 
       <View style={styles.tabBox}>
         <TouchableOpacity
@@ -197,13 +206,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f1e9",
     padding: 16,
+    height: Platform.OS === "web" ? "100vh" : "100%",
+    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+    overflow: "hidden",
+  },
+
+  headerBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
 
   title: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#4b3621",
-    marginBottom: 16,
   },
 
   tabBox: {
@@ -235,7 +262,7 @@ const styles = StyleSheet.create({
   },
 
   listContent: {
-    paddingBottom: 80,
+    paddingBottom: 120,
   },
 
   card: {

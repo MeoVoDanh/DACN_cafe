@@ -15,6 +15,10 @@ dotenv.config();
 const app = express();
 
 app.use(cors());
+app.use((req, res, next) => {
+  console.log(`[Request] ${req.method} ${req.url} - Auth Header: ${req.headers.authorization}`);
+  next();
+});
 app.use(express.json());
 
 app.get("/", (req, res) => {

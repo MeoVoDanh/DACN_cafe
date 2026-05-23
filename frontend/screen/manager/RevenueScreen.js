@@ -5,13 +5,15 @@ import {
   View,
   TouchableOpacity,
   SafeAreaView,
+  ScrollView,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 
 export default function RevenueScreen({ navigation }) {
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.navigate("DashboardScreen")} style={styles.backBtn}>
           <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
         </TouchableOpacity>
@@ -37,12 +39,14 @@ export default function RevenueScreen({ navigation }) {
           <Text style={styles.miniLbl}>Món bán chạy nhất</Text>
         </View>
       </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff8f0", padding: 20 },
+  safeArea: { flex: 1, backgroundColor: "#fff8f0" },
+  container: { backgroundColor: "#fff8f0", padding: 20 },
   header: {
     flexDirection: "row",
     alignItems: "center",

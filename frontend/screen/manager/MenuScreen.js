@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   ScrollView,
   Image,
+  Platform,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -22,9 +23,10 @@ import {
 } from "../../redux/menuSlice";
 import * as ImagePicker from "expo-image-picker";
 import { FontAwesome5 } from "@expo/vector-icons";
+import api from "../../redux/api";
 
-export default function MenuScreen() {
-  const BASE_URL = "http://192.168.203.1:3000";
+export default function MenuScreen({ navigation }) {
+  const BASE_URL = api.defaults.baseURL.replace("/api", "");
   const [previewImage, setPreviewImage] = useState(null);
   const dispatch = useDispatch();
 
@@ -39,6 +41,7 @@ export default function MenuScreen() {
   const [donGia, setDonGia] = useState("");
   const [moTa, setMoTa] = useState("");
   const [hinhAnh, setHinhAnh] = useState("");
+  const [trangThai, setTrangThai] = useState("Đang bán");
 
   useEffect(() => {
     dispatch(fetchDrinks());
@@ -58,6 +61,7 @@ export default function MenuScreen() {
     setDonGia("");
     setMoTa("");
     setHinhAnh("");
+    setTrangThai("Đang bán");
     setPreviewImage(null);
   };
   const openCreateModal = () => {
@@ -71,6 +75,7 @@ export default function MenuScreen() {
     setDonGia(String(drink.donGia || ""));
     setMoTa(drink.moTa || "");
     setHinhAnh(drink.hinhAnh || "");
+    setTrangThai(drink.trangThai || "Đang bán");
 
     if (drink.hinhAnh) {
       setPreviewImage(`${BASE_URL}/img/${drink.hinhAnh}`);
@@ -141,6 +146,7 @@ export default function MenuScreen() {
       donGia: Number(donGia),
       moTa: moTa.trim(),
       hinhAnh: hinhAnh.trim(),
+      trangThai: trangThai,
     };
 
     let result;
@@ -166,18 +172,39 @@ export default function MenuScreen() {
     }
   };
 
-  const handleDelete = (maDoUong) => {
-    Alert.alert("Xác nhận", "Bạn có chắc muốn xóa đồ uống này không?", [
-      { text: "Hủy", style: "cancel" },
-      {
-        text: "Xóa",
-        style: "destructive",
-        onPress: async () => {
-          await dispatch(deleteDrink(maDoUong));
-          dispatch(fetchDrinks());
+  const handleToggleStatus = (drink) => {
+    const isCurrentlySelling = drink.trangThai !== "Dừng bán";
+    const newStatus = isCurrentlySelling ? "Dừng bán" : "Đang bán";
+    const actionText = isCurrentlySelling ? "dừng bán" : "tiếp tục bán";
+
+    Alert.alert(
+      "Xác nhận thay đổi",
+      `Bạn có chắc chắn muốn ${actionText} đồ uống "${drink.tenDoUong}" không?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xác nhận",
+          onPress: async () => {
+            const payload = {
+              tenDoUong: drink.tenDoUong,
+              donGia: drink.donGia,
+              moTa: drink.moTa,
+              hinhAnh: drink.hinhAnh,
+              trangThai: newStatus,
+            };
+            const result = await dispatch(
+              updateDrink({
+                maDoUong: drink.maDoUong,
+                data: payload,
+              }),
+            );
+            if (updateDrink.fulfilled.match(result)) {
+              dispatch(fetchDrinks());
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const renderDrink = ({ item }) => {
@@ -202,9 +229,26 @@ export default function MenuScreen() {
         <View style={styles.info}>
           <Text style={styles.name}>{item.tenDoUong}</Text>
 
-          <Text style={styles.price}>
-            {Number(item.donGia || 0).toLocaleString("vi-VN")}đ
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
+            <Text style={styles.price}>
+              {Number(item.donGia || 0).toLocaleString("vi-VN")}đ
+            </Text>
+            <View
+              style={[
+                styles.statusBadge,
+                item.trangThai === "Dừng bán" ? styles.statusBadgeStop : styles.statusBadgeActive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusBadgeText,
+                  item.trangThai === "Dừng bán" ? styles.statusBadgeTextStop : styles.statusBadgeTextActive,
+                ]}
+              >
+                {item.trangThai || "Đang bán"}
+              </Text>
+            </View>
+          </View>
 
           <Text style={styles.desc} numberOfLines={2}>
             {item.moTa || "Không có mô tả"}
@@ -224,10 +268,17 @@ export default function MenuScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.actionBtn, styles.deleteBtn]}
-            onPress={() => handleDelete(item.maDoUong)}
+            style={[
+              styles.actionBtn,
+              item.trangThai === "Dừng bán" ? styles.resumeBtn : styles.stopBtn,
+            ]}
+            onPress={() => handleToggleStatus(item)}
           >
-            <FontAwesome5 name="trash" size={14} color="#fff" />
+            <FontAwesome5
+              name={item.trangThai === "Dừng bán" ? "play" : "ban"}
+              size={12}
+              color="#fff"
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -246,7 +297,15 @@ export default function MenuScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerBox}>
-        <Text style={styles.title}>Quản lý menu</Text>
+        <View style={styles.titleWrapper}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("DashboardScreen")}
+            style={styles.backBtn}
+          >
+            <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Quản lý menu</Text>
+        </View>
 
         <TouchableOpacity style={styles.addBtn} onPress={openCreateModal}>
           <FontAwesome5 name="plus" size={14} color="#fff" />
@@ -283,6 +342,32 @@ export default function MenuScreen() {
               keyboardType="numeric"
             />
             <Input label="Mô tả" value={moTa} onChangeText={setMoTa} />
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Trạng thái kinh doanh</Text>
+              <View style={styles.dropdownContainer}>
+                {["Đang bán", "Dừng bán"].map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[
+                      styles.dropdownOption,
+                      trangThai === status && styles.dropdownOptionSelected,
+                    ]}
+                    onPress={() => setTrangThai(status)}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownOptionText,
+                        trangThai === status && styles.dropdownOptionTextSelected,
+                      ]}
+                    >
+                      {status}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.formGroup}>
               <Text style={styles.label}>Hình ảnh</Text>
 
@@ -351,12 +436,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f1e9",
     padding: 16,
+    height: Platform.OS === "web" ? "100vh" : "100%",
+    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+    overflow: "hidden",
   },
   headerBox: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
+  },
+  titleWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
   title: {
     fontSize: 24,
@@ -377,7 +478,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   listContent: {
-    paddingBottom: 80,
+    paddingBottom: 120,
   },
   card: {
     flexDirection: "row",
@@ -559,5 +660,62 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     color: "#8d6e63",
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  statusBadgeActive: {
+    backgroundColor: "#e8f5e9",
+    borderColor: "#c8e6c9",
+  },
+  statusBadgeStop: {
+    backgroundColor: "#ffebee",
+    borderColor: "#ffcdd2",
+  },
+  statusBadgeText: {
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  statusBadgeTextActive: {
+    color: "#2e7d32",
+  },
+  statusBadgeTextStop: {
+    color: "#c62828",
+  },
+  stopBtn: {
+    backgroundColor: "#D32F2F",
+  },
+  resumeBtn: {
+    backgroundColor: "#2E7D32",
+  },
+  dropdownContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 6,
+  },
+  dropdownOption: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dropdownOptionSelected: {
+    borderColor: "#4b3621",
+    backgroundColor: "#4b3621",
+  },
+  dropdownOptionText: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#8d6e63",
+  },
+  dropdownOptionTextSelected: {
+    color: "#fff",
   },
 });

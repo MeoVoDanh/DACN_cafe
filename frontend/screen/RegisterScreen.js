@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 
@@ -38,7 +39,10 @@ export default function RegisterScreen({ onRegister, onSwitchToLogin }) {
         style={styles.backgroundImage}
         resizeMode="cover"
       >
-        <View style={styles.overlay}>
+        <ScrollView
+          contentContainerStyle={styles.overlay}
+          keyboardShouldPersistTaps="handled"
+        >
           <SafeAreaView style={styles.safeArea}>
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -113,7 +117,7 @@ export default function RegisterScreen({ onRegister, onSwitchToLogin }) {
               </View>
             </KeyboardAvoidingView>
           </SafeAreaView>
-        </View>
+        </ScrollView>
       </ImageBackground>
     </View>
   );
@@ -123,7 +127,7 @@ const styles = StyleSheet.create({
   outerContainer: { flex: 1 },
   backgroundImage: { width: "100%", height: "100%" },
   overlay: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
