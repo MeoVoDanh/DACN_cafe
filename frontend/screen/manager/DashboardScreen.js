@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ImageBackground,
   StatusBar,
+  ScrollView,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useDispatch } from "react-redux";
@@ -35,7 +36,10 @@ export default function DashboardScreen({ navigation }) {
 
         {/* Vùng an toàn bọc toàn bộ content */}
         <SafeAreaView style={styles.safeArea}>
-          <View style={styles.container}>
+          <ScrollView
+            contentContainerStyle={styles.container}
+            showsVerticalScrollIndicator={true}
+          >
             {/* Header Mới: Gom nút Đăng xuất vào trong để nó nằm dưới tai thỏ */}
             <View style={styles.header}>
               {/* Logo và Tiêu đề bên trái */}
@@ -118,7 +122,7 @@ export default function DashboardScreen({ navigation }) {
               />
               <View style={styles.line} />
             </View>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </View>
     </ImageBackground>
@@ -130,7 +134,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.45)" },
   safeArea: { flex: 1, width: "100%" },
   container: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 20, // Giảm padding dọc xuống một chút

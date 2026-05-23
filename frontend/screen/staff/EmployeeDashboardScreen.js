@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   ImageBackground,
   StatusBar,
+  ScrollView,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
@@ -37,7 +38,10 @@ export default function EmployeeDashboardScreen({ navigation }) {
         />
 
         <SafeAreaView style={styles.safeArea}>
-          <View style={styles.container}>
+          <ScrollView
+            contentContainerStyle={styles.container}
+            showsVerticalScrollIndicator={true}
+          >
             <View style={styles.header}>
               <View style={styles.headerContent}>
                 <View style={styles.iconCircle}>
@@ -122,7 +126,7 @@ export default function EmployeeDashboardScreen({ navigation }) {
               />
               <View style={styles.line} />
             </View>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </View>
     </ImageBackground>
@@ -147,7 +151,7 @@ const styles = StyleSheet.create({
   },
 
   container: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 20,

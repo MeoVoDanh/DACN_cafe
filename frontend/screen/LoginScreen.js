@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ImageBackground,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser, clearError } from "../redux/authSlice";
@@ -56,7 +57,10 @@ export default function LoginScreen({ navigation }) {
       style={styles.container}
       resizeMode="cover"
     >
-      <View style={styles.overlayContainer}>
+      <ScrollView
+        contentContainerStyle={styles.overlayContainer}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.card}>
           <View style={styles.logoCircle}>
             <FontAwesome5 name="store" size={24} color="#fff" />
@@ -131,7 +135,7 @@ export default function LoginScreen({ navigation }) {
             )}
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </ImageBackground>
   );
 }
@@ -144,7 +148,7 @@ const styles = StyleSheet.create({
   },
 
   overlayContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,

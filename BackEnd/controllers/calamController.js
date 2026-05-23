@@ -7,6 +7,8 @@ import {
   getCaLamConTrongService,
   huyDangKyCaLamService,
   updateCaLamService,
+  getCaLamByNgayService,
+  saveCaLamByNgayService,
 } from "../services/calamService.js";
 
 export const getAllCaLam = async (req, res) => {
@@ -126,6 +128,30 @@ export const deleteCaLam = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Lỗi xóa ca làm",
+      error: error.message,
+    });
+  }
+};
+
+export const getCaLamByNgay = async (req, res) => {
+  try {
+    const result = await getCaLamByNgayService(req.params.ngay);
+    return res.status(result.statusCode).json(result.data);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Lỗi lấy danh sách ca làm theo ngày",
+      error: error.message,
+    });
+  }
+};
+
+export const saveCaLamByNgay = async (req, res) => {
+  try {
+    const result = await saveCaLamByNgayService(req.params.ngay, req.body);
+    return res.status(result.statusCode).json(result.data);
+  } catch (error) {
+    return res.status(500).json({
+      message: "Lỗi lưu danh sách ca làm",
       error: error.message,
     });
   }

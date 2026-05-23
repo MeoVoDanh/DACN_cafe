@@ -8,6 +8,8 @@ import {
   getCaLamConTrong,
   huyDangKyCaLam,
   updateCaLam,
+  getCaLamByNgay,
+  saveCaLamByNgay,
 } from "../controllers/calamController.js";
 import { authorizeRoles, verifyToken } from "../middleware/authMiddleware.js";
 
@@ -48,5 +50,8 @@ router.patch(
 router.put("/:maCa", verifyToken, authorizeRoles("Admin"), updateCaLam);
 
 router.delete("/:maCa", verifyToken, authorizeRoles("Admin"), deleteCaLam);
+
+router.get("/ngay/:ngay", verifyToken, authorizeRoles("Admin"), getCaLamByNgay);
+router.post("/ngay/:ngay", verifyToken, authorizeRoles("Admin"), saveCaLamByNgay);
 
 export default router;

@@ -6,12 +6,14 @@ import {
   ActivityIndicator,
   Alert,
   SafeAreaView,
+  ScrollView,
+  Platform,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProfile } from "../../redux/profileSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const dispatch = useDispatch();
 
   const { profile, isLoading, error } = useSelector((state) => state.profile);
@@ -36,8 +38,19 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.card}>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.headerBox}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("EmployeeDashboardScreen")}
+            style={styles.backBtn}
+          >
+            <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+          </TouchableOpacity>
+          <Text style={styles.titleText}>Thông tin cá nhân</Text>
+        </View>
+
+        <View style={styles.card}>
         <View style={styles.avatar}>
           <FontAwesome5 name="user" size={34} color="#fff" />
         </View>
@@ -52,7 +65,8 @@ export default function ProfileScreen() {
           <InfoRow label="Mã nhân viên" value={profile?.MaNhanVien} />
           <InfoRow label="Mã tài khoản" value={profile?.MaTaiKhoan} />
         </View>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -67,10 +81,38 @@ const InfoRow = ({ label, value }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: "#f8f1e9",
+    height: Platform.OS === "web" ? "100vh" : "100%",
+    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+    overflow: "hidden",
+  },
+  container: {
+    backgroundColor: "#f8f1e9",
     padding: 16,
+  },
+
+  headerBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+
+  titleText: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#4b3621",
   },
 
   loadingContainer: {

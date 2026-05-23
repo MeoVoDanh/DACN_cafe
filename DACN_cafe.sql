@@ -12,7 +12,7 @@ CREATE TABLE TaiKhoan (
     MaTaiKhoan INT AUTO_INCREMENT PRIMARY KEY COMMENT 'Khóa chính tài khoản',
     tenDangNhap VARCHAR(100) NOT NULL UNIQUE COMMENT 'Tên đăng nhập hệ thống',
     MatKhau VARCHAR(255) NOT NULL COMMENT 'Mật khẩu đã mã hóa bcrypt hoặc mật khẩu thường khi test',
-    vaiTro ENUM('Admin', 'NhanVien') NOT NULL DEFAULT 'NhanVien' COMMENT 'Vai trò tài khoản',
+    vaiTro VARCHAR(50) NOT NULL DEFAULT 'NhanVien' COMMENT 'Vai trò tài khoản',
     trangThai ENUM('HoatDong', 'Khoa') NOT NULL DEFAULT 'HoatDong' COMMENT 'Trạng thái tài khoản',
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -27,8 +27,10 @@ CREATE TABLE NhanVien (
     HoTen VARCHAR(100) NOT NULL COMMENT 'Họ tên nhân viên',
     Email VARCHAR(100) UNIQUE COMMENT 'Email nhân viên',
     SDT VARCHAR(11) COMMENT 'Số điện thoại nhân viên',
+    SoCCCD VARCHAR(12) UNIQUE NULL COMMENT 'Số căn cước công dân',
     DiaChi VARCHAR(255) NULL COMMENT 'Địa chỉ nhân viên',
     MaTaiKhoan INT NOT NULL UNIQUE COMMENT 'Khóa ngoại liên kết tài khoản',
+    TrangThai ENUM('Đang làm việc', 'Đã nghỉ việc') NOT NULL DEFAULT 'Đang làm việc' COMMENT 'Trạng thái nhân viên',
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -124,7 +126,7 @@ CREATE TABLE DoUong (
     donGia DOUBLE NOT NULL COMMENT 'Giá bán',
     moTa TEXT NULL COMMENT 'Mô tả đồ uống',
     hinhAnh VARCHAR(255) DEFAULT NULL COMMENT 'Tên file hoặc đường dẫn hình ảnh',
-    trangThai ENUM('DangBan', 'NgungBan') DEFAULT 'DangBan' COMMENT 'Trạng thái kinh doanh',
+    trangThai VARCHAR(50) DEFAULT 'Đang bán' COMMENT 'Trạng thái kinh doanh',
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 

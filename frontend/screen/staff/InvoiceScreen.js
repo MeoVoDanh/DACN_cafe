@@ -20,7 +20,7 @@ import {
 } from "../../redux/invoiceSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 
-export default function InvoiceScreen() {
+export default function InvoiceScreen({ navigation }) {
   const dispatch = useDispatch();
 
   const { invoices, drinks, isLoading, error, message } = useSelector(
@@ -180,7 +180,15 @@ export default function InvoiceScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.headerBox}>
-        <Text style={styles.title}>Quản lý hóa đơn</Text>
+        <View style={styles.titleWrapper}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("EmployeeDashboardScreen")}
+            style={styles.backBtn}
+          >
+            <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Quản lý hóa đơn</Text>
+        </View>
 
         <TouchableOpacity
           style={styles.addBtn}
@@ -214,7 +222,7 @@ export default function InvoiceScreen() {
           <ScrollView style={{ flex: 1 }}>
             <Text style={styles.sectionTitle}>Chọn đồ uống</Text>
 
-            {drinks.map((drink) => (
+            {drinks.filter(d => d.trangThai !== "Dừng bán").map((drink) => (
               <View key={drink.maDoUong} style={styles.drinkRow}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.drinkName}>{drink.tenDoUong}</Text>
@@ -310,6 +318,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
+  },
+
+  titleWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
 
   title: {

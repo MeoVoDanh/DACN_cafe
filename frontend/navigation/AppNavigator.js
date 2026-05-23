@@ -53,25 +53,25 @@ const AppNavigator = () => {
             <Stack.Screen
               name="InvoiceScreen"
               component={InvoiceScreen}
-              options={{ headerShown: true, title: "Quản lý hóa đơn" }}
+              options={{ headerShown: false }}
             />
 
             <Stack.Screen
               name="MyOrderCountScreen"
               component={MyOrderCountScreen}
-              options={{ headerShown: true, title: "Đơn đã thực hiện" }}
+              options={{ headerShown: false }}
             />
 
             <Stack.Screen
               name="EmployeeShiftScreen"
               component={EmployeeShiftScreen}
-              options={{ headerShown: true, title: "Quản lý ca" }}
+              options={{ headerShown: false }}
             />
 
             <Stack.Screen
               name="ProfileScreen"
               component={ProfileScreen}
-              options={{ headerShown: true, title: "Thông tin cá nhân" }}
+              options={{ headerShown: false }}
             />
           </>
         )}

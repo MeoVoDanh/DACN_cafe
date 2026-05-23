@@ -8,8 +8,11 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  SafeAreaView,
+  Platform,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { FontAwesome5 } from "@expo/vector-icons";
 import {
   createEmployee,
   fetchEmployees,
@@ -29,17 +32,21 @@ export default function EmployeeScreen({ navigation, route }) {
   const [HoTen, setHoTen] = useState("");
   const [Email, setEmail] = useState("");
   const [SDT, setSDT] = useState("");
+  const [SoCCCD, setSoCCCD] = useState("");
   const [tenDangNhap, setTenDangNhap] = useState("");
   const [MatKhau, setMatKhau] = useState("");
-  const [vaiTro, setVaiTro] = useState("NhanVien");
+  const [vaiTro, setVaiTro] = useState("Pha chế");
+  const [TrangThai, setTrangThai] = useState("Đang làm việc");
 
   useEffect(() => {
     if (isEditMode && employee) {
       setHoTen(employee.HoTen || "");
       setEmail(employee.Email || "");
       setSDT(employee.SDT || "");
+      setSoCCCD(employee.SoCCCD || "");
       setTenDangNhap(employee.tenDangNhap || "");
       setVaiTro(employee.vaiTro || "NhanVien");
+      setTrangThai(employee.TrangThai || "Đang làm việc");
     }
   }, [isEditMode, employee]);
 
@@ -63,6 +70,8 @@ export default function EmployeeScreen({ navigation, route }) {
       HoTen: HoTen.trim(),
       Email: Email.trim(),
       SDT: SDT.trim(),
+      SoCCCD: SoCCCD.trim(),
+      TrangThai: "Đang làm việc",
       vaiTro,
     };
 
@@ -103,10 +112,20 @@ export default function EmployeeScreen({ navigation, route }) {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>
-        {isEditMode ? "Cập nhật nhân viên" : "Thêm nhân viên"}
-      </Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+          </TouchableOpacity>
+          <Text style={styles.title}>
+            {isEditMode ? "Cập nhật nhân viên" : "Thêm nhân viên"}
+          </Text>
+        </View>
 
       <View style={styles.formGroup}>
         <Text style={styles.label}>Họ tên</Text>
@@ -140,6 +159,17 @@ export default function EmployeeScreen({ navigation, route }) {
         />
       </View>
 
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Số CCCD</Text>
+        <TextInput
+          style={styles.input}
+          value={SoCCCD}
+          onChangeText={setSoCCCD}
+          placeholder="Nhập số CCCD"
+          keyboardType="numeric"
+        />
+      </View>
+
       {!isEditMode && (
         <>
           <View style={styles.formGroup}>
@@ -168,38 +198,26 @@ export default function EmployeeScreen({ navigation, route }) {
 
       <View style={styles.formGroup}>
         <Text style={styles.label}>Vai trò</Text>
-
-        <View style={styles.roleBox}>
-          <TouchableOpacity
-            style={[
-              styles.roleBtn,
-              vaiTro === "NhanVien" && styles.roleBtnActive,
-            ]}
-            onPress={() => setVaiTro("NhanVien")}
-          >
-            <Text
+        <View style={styles.roleGrid}>
+          {["Pha chế", "Thu ngân", "Phục vụ", "Tạp vụ"].map((role) => (
+            <TouchableOpacity
+              key={role}
               style={[
-                styles.roleText,
-                vaiTro === "NhanVien" && styles.roleTextActive,
+                styles.roleGridBtn,
+                vaiTro === role && styles.roleGridBtnActive,
               ]}
+              onPress={() => setVaiTro(role)}
             >
-              Nhân viên
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.roleBtn, vaiTro === "Admin" && styles.roleBtnActive]}
-            onPress={() => setVaiTro("Admin")}
-          >
-            <Text
-              style={[
-                styles.roleText,
-                vaiTro === "Admin" && styles.roleTextActive,
-              ]}
-            >
-              Admin
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.roleGridBtnText,
+                  vaiTro === role && styles.roleGridBtnTextActive,
+                ]}
+              >
+                {role}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -217,30 +235,78 @@ export default function EmployeeScreen({ navigation, route }) {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.cancelBtn}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.cancelText}>Quay lại</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      {/* Removed Quay lại button */}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f8f1e9",
+    height: Platform.OS === "web" ? "100vh" : "100%",
+    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+  },
   container: {
     flex: 1,
     backgroundColor: "#f8f1e9",
+  },
+  scrollContent: {
     padding: 16,
+    paddingBottom: 60,
   },
 
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    marginTop: 8,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#4b3621",
-    marginBottom: 20,
   },
 
+  roleGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  roleGridBtn: {
+    width: "47%",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    marginBottom: 4,
+  },
+  roleGridBtnActive: {
+    backgroundColor: "#4b3621",
+    borderColor: "#4b3621",
+  },
+  roleGridBtnText: {
+    fontSize: 13,
+    color: "#6d4c41",
+    fontWeight: "bold",
+  },
+  roleGridBtnTextActive: {
+    color: "#fff",
+  },
   formGroup: {
     marginBottom: 16,
   },

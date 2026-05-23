@@ -68,6 +68,38 @@ export const deleteShift = createAsyncThunk(
   },
 );
 
+export const fetchShiftsByDate = createAsyncThunk(
+  "shift/fetchShiftsByDate",
+  async (dateString, thunkAPI) => {
+    try {
+      const response = await api.get(`/calam/ngay/${dateString}`);
+      return response.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message ||
+          error.message ||
+          "Không lấy được danh sách ca theo ngày",
+      );
+    }
+  },
+);
+
+export const saveShiftsByDate = createAsyncThunk(
+  "shift/saveShiftsByDate",
+  async ({ dateString, shiftsData }, thunkAPI) => {
+    try {
+      const response = await api.post(`/calam/ngay/${dateString}`, shiftsData);
+      return response.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message ||
+          error.message ||
+          "Lưu danh sách ca thất bại",
+      );
+    }
+  },
+);
+
 const shiftSlice = createSlice({
   name: "shift",
   initialState,
@@ -113,6 +145,30 @@ const shiftSlice = createSlice({
         state.message = "Xóa ca thành công";
       })
       .addCase(deleteShift.rejected, (state, action) => {
+        state.error = action.payload;
+      })
+      .addCase(fetchShiftsByDate.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchShiftsByDate.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.shifts = action.payload;
+      })
+      .addCase(fetchShiftsByDate.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      .addCase(saveShiftsByDate.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(saveShiftsByDate.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.message = action.payload.message || "Lưu ca thành công";
+      })
+      .addCase(saveShiftsByDate.rejected, (state, action) => {
+        state.isLoading = false;
         state.error = action.payload;
       });
   },
