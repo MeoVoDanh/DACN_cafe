@@ -5,6 +5,7 @@ export const getAllHoaDonService = async () => {
     SELECT 
       hd.maHoaDon,
       hd.ngaylap,
+      hd.createdAt,
       hd.tongtien,
       hd.trangthaithanhtoan,
       hd.MaNhanVien,
@@ -26,6 +27,7 @@ export const getHoaDonByIdService = async (maHoaDon) => {
     SELECT 
       hd.maHoaDon,
       hd.ngaylap,
+      hd.createdAt,
       hd.tongtien,
       hd.trangthaithanhtoan,
       hd.MaNhanVien,
@@ -142,10 +144,10 @@ export const createHoaDonService = async (data, user) => {
       await connection.query(
         `
         INSERT INTO ChiTietHoaDon 
-        (maHoaDon, maDoUong, soluong, dongia, thanhtien)
-        VALUES (?, ?, ?, ?, ?)
+        (maHoaDon, maDoUong, soluong, dongia)
+        VALUES (?, ?, ?, ?)
         `,
-        [maHoaDon, item.maDoUong, item.soluong, item.dongia, item.thanhtien],
+        [maHoaDon, item.maDoUong, item.soluong, item.dongia],
       );
     }
 

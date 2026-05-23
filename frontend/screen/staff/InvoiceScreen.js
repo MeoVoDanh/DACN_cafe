@@ -17,6 +17,7 @@ import {
   fetchDrinksForInvoice,
   fetchInvoices,
   payInvoice,
+  clearInvoiceMessage,
 } from "../../redux/invoiceSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 
@@ -37,15 +38,26 @@ export default function InvoiceScreen({ navigation }) {
 
   useEffect(() => {
     if (error) {
-      Alert.alert("Lỗi", error);
+      Alert.alert("Lỗi", error, [
+        { text: "OK", onPress: () => dispatch(clearInvoiceMessage()) }
+      ]);
     }
-  }, [error]);
+  }, [error, dispatch]);
 
   useEffect(() => {
     if (message) {
-      Alert.alert("Thông báo", message);
+      Alert.alert("Thông báo", message, [
+        { text: "OK", onPress: () => dispatch(clearInvoiceMessage()) }
+      ]);
     }
-  }, [message]);
+  }, [message, dispatch]);
+
+  // Dọn dẹp thông báo lỗi/thành công khi đóng hoặc rời màn hình
+  useEffect(() => {
+    return () => {
+      dispatch(clearInvoiceMessage());
+    };
+  }, [dispatch]);
 
   const reloadData = () => {
     dispatch(fetchInvoices());
@@ -149,7 +161,7 @@ export default function InvoiceScreen({ navigation }) {
           </View>
         </View>
 
-        <Text style={styles.text}>Ngày lập: {formatDate(item.ngaylap)}</Text>
+        <Text style={styles.text}>Ngày lập: {formatDate(item.createdAt || item.ngaylap)}</Text>
         <Text style={styles.text}>Nhân viên: {item.HoTen || "Không rõ"}</Text>
         <Text style={styles.total}>
           Tổng tiền: {Number(item.tongtien || 0).toLocaleString("vi-VN")}đ
@@ -303,7 +315,21 @@ export default function InvoiceScreen({ navigation }) {
 
 const formatDate = (value) => {
   if (!value) return "";
-  return new Date(value).toLocaleDateString("vi-VN");
+  const date = new Date(value);
+  
+  const d = date.getDate().toString().padStart(2, "0");
+  const m = (date.getMonth() + 1).toString().padStart(2, "0");
+  const y = date.getFullYear();
+  
+  const hh = date.getHours().toString().padStart(2, "0");
+  const mm = date.getMinutes().toString().padStart(2, "0");
+  const ss = date.getSeconds().toString().padStart(2, "0");
+  
+  if (hh === "00" && mm === "00" && ss === "00") {
+    return `${d}/${m}/${y}`;
+  }
+  
+  return `${hh}:${mm}:${ss} - ${d}/${m}/${y}`;
 };
 
 const styles = StyleSheet.create({

@@ -3,6 +3,7 @@ import api from "./api";
 
 const initialState = {
   shifts: [],
+  pendingShifts: [],
   isLoading: false,
   error: null,
   message: null,
@@ -100,6 +101,38 @@ export const saveShiftsByDate = createAsyncThunk(
   },
 );
 
+export const fetchPendingShifts = createAsyncThunk(
+  "shift/fetchPendingShifts",
+  async (_, thunkAPI) => {
+    try {
+      const response = await api.get("/calam/cho-duyet");
+      return response.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message ||
+          error.message ||
+          "Không lấy được danh sách ca chờ duyệt",
+      );
+    }
+  },
+);
+
+export const pheDuyetCaLam = createAsyncThunk(
+  "shift/pheDuyetCaLam",
+  async ({ maCa, action }, thunkAPI) => {
+    try {
+      const response = await api.patch(`/calam/${maCa}/phe-duyet`, { action });
+      return { maCa, action, data: response.data };
+    } catch (error) {
+      return thunkAPI.rejectWithValue(
+        error.response?.data?.message ||
+          error.message ||
+          "Phê duyệt ca trực thất bại",
+      );
+    }
+  },
+);
+
 const shiftSlice = createSlice({
   name: "shift",
   initialState,
@@ -168,6 +201,33 @@ const shiftSlice = createSlice({
         state.message = action.payload.message || "Lưu ca thành công";
       })
       .addCase(saveShiftsByDate.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      .addCase(fetchPendingShifts.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchPendingShifts.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.pendingShifts = action.payload;
+      })
+      .addCase(fetchPendingShifts.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      .addCase(pheDuyetCaLam.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(pheDuyetCaLam.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.pendingShifts = state.pendingShifts.filter(
+          (item) => item.maCa !== action.payload.maCa
+        );
+        state.message = action.payload.data.message || "Xử lý phê duyệt thành công";
+      })
+      .addCase(pheDuyetCaLam.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       });

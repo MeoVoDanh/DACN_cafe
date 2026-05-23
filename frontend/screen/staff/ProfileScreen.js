@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,14 @@ import {
   SafeAreaView,
   ScrollView,
   Platform,
+  TouchableOpacity,
+  Image,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchProfile } from "../../redux/profileSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker"; // Import Expo Image Picker
+import api from "../../redux/api"; // Import api để thực hiện upload
 
 export default function ProfileScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -27,6 +31,78 @@ export default function ProfileScreen({ navigation }) {
       Alert.alert("Lỗi", error);
     }
   }, [error]);
+
+  // Lấy động đường dẫn Server chứa ảnh (Hỗ trợ chạy mượt cả trên giả lập lẫn máy thật)
+  const imageBaseUrl = useMemo(() => {
+    if (api.defaults.baseURL) {
+      return api.defaults.baseURL.replace("/api", "/img");
+    }
+    return "http://localhost:3000/img";
+  }, []);
+
+  // Hàm kích hoạt chọn ảnh từ thư viện thiết bị
+  const handlePickImage = async () => {
+    // Xin quyền truy cập thư viện ảnh của máy
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Quyền truy cập",
+        "Vui lòng cấp quyền truy cập thư viện ảnh trong cài đặt để đổi ảnh đại diện!",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1], // Cắt tỉ lệ vuông hoàn hảo cho avatar
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const pickedUri = result.assets[0].uri;
+      await handleUploadAvatar(pickedUri);
+    }
+  };
+
+  // Hàm tải ảnh lên Backend và cập nhật cơ sở dữ liệu
+  const handleUploadAvatar = async (uri) => {
+    try {
+      const formData = new FormData();
+
+      // Xử lý File Upload tương thích cả Web và Mobile Native
+      if (Platform.OS === "web") {
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append("image", blob, "avatar.jpg");
+      } else {
+        formData.append("image", {
+          uri: uri,
+          name: "avatar.jpg",
+          type: "image/jpeg",
+        });
+      }
+
+      // 1. Tải ảnh lên Server (Trả về fileName)
+      const uploadResponse = await api.post("/upload/image", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const fileName = uploadResponse.data.fileName;
+
+      // 2. Cập nhật tên file ảnh mới vào database của nhân viên
+      await api.put("/canhan/cap-nhat-avatar", { HinhAnh: fileName });
+
+      // 3. Tải lại profile mới
+      dispatch(fetchProfile());
+      Alert.alert("Thành công", "Đã cập nhật ảnh đại diện mới của bạn!");
+    } catch (err) {
+      console.error("Lỗi cập nhật ảnh đại diện nhân viên:", err);
+      Alert.alert("Lỗi", "Không thể cập nhật ảnh đại diện lúc này. Vui lòng thử lại!");
+    }
+  };
 
   if (isLoading && !profile) {
     return (
@@ -51,25 +127,49 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.card}>
-        <View style={styles.avatar}>
-          <FontAwesome5 name="user" size={34} color="#fff" />
-        </View>
+          {/* Avatar Container cho phép chạm đổi ảnh */}
+          <View style={styles.avatarContainer}>
+            <TouchableOpacity 
+              style={styles.avatarWrapper} 
+              onPress={handlePickImage} 
+              activeOpacity={0.8}
+            >
+              {profile?.HinhAnh ? (
+                <Image 
+                  source={{ uri: `${imageBaseUrl}/${profile.HinhAnh}` }} 
+                  style={styles.avatarImage} 
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <FontAwesome5 name="user" size={32} color="#fff" />
+                </View>
+              )}
+              
+              {/* Nút badge camera nhỏ đè lên ở góc dưới phải */}
+              <View style={styles.cameraIconBadge}>
+                <FontAwesome5 name="camera" size={10} color="#fff" />
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.hintText}>Chạm để đổi ảnh đại diện</Text>
+          </View>
 
-        <Text style={styles.name}>{profile?.HoTen || "Chưa có họ tên"}</Text>
-        <Text style={styles.role}>{profile?.vaiTro || "Nhân viên"}</Text>
+          <Text style={styles.name}>{profile?.HoTen || "Chưa có họ tên"}</Text>
+          <Text style={styles.role}>{profile?.vaiTro || "Nhân viên"}</Text>
 
-        <View style={styles.infoBox}>
-          <InfoRow label="Tên đăng nhập" value={profile?.tenDangNhap} />
-          <InfoRow label="Email" value={profile?.Email} />
-          <InfoRow label="Số điện thoại" value={profile?.SDT} />
-          <InfoRow label="Mã nhân viên" value={profile?.MaNhanVien} />
-          <InfoRow label="Mã tài khoản" value={profile?.MaTaiKhoan} />
-        </View>
+          <View style={styles.infoBox}>
+            <InfoRow label="Tên đăng nhập" value={profile?.tenDangNhap} />
+            <InfoRow label="Email" value={profile?.Email} />
+            <InfoRow label="Số điện thoại" value={profile?.SDT} />
+            <InfoRow label="Mã nhân viên" value={profile?.MaNhanVien} />
+            <InfoRow label="Mã tài khoản" value={profile?.MaTaiKhoan} />
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+// Bổ sung helper InfoRow
 
 const InfoRow = ({ label, value }) => {
   return (
@@ -137,14 +237,51 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-  avatar: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
+  /* AVATAR INTERACTIVE STYLES */
+  avatarContainer: {
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  avatarWrapper: {
+    position: "relative",
+    width: 90,
+    height: 90,
+  },
+  avatarImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 2,
+    borderColor: "#c9a66b",
+  },
+  avatarPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     backgroundColor: "#4b3621",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 14,
+    borderWidth: 2,
+    borderColor: "#c9a66b",
+  },
+  cameraIconBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#8d6e63",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  hintText: {
+    fontSize: 11,
+    color: "#8d6e63",
+    marginTop: 8,
+    fontStyle: "italic",
   },
 
   name: {

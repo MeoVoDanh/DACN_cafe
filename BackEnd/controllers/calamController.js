@@ -9,6 +9,8 @@ import {
   updateCaLamService,
   getCaLamByNgayService,
   saveCaLamByNgayService,
+  getPendingShiftsService,
+  pheDuyetCaLamService,
 } from "../services/calamService.js";
 
 export const getAllCaLam = async (req, res) => {
@@ -152,6 +154,36 @@ export const saveCaLamByNgay = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Lỗi lưu danh sách ca làm",
+      error: error.message,
+    });
+  }
+};
+
+export const getPendingShifts = async (req, res) => {
+  try {
+    const result = await getPendingShiftsService();
+    return res.status(result.statusCode).json(result.data);
+  } catch (error) {
+    console.error("[calamController.getPendingShifts Error]:", error);
+    return res.status(500).json({
+      message: "Lỗi lấy danh sách ca trực chờ duyệt",
+      error: error.message,
+    });
+  }
+};
+
+export const pheDuyetCaLam = async (req, res) => {
+  try {
+    const { action } = req.body; // 'approve' hoặc 'reject'
+    if (!action) {
+      return res.status(400).json({ message: "Thiếu hành động phê duyệt (action)" });
+    }
+    const result = await pheDuyetCaLamService(req.params.maCa, action);
+    return res.status(result.statusCode).json(result.data);
+  } catch (error) {
+    console.error("[calamController.pheDuyetCaLam Error]:", error);
+    return res.status(500).json({
+      message: "Lỗi phê duyệt ca trực",
       error: error.message,
     });
   }

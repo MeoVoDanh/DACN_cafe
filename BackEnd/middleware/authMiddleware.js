@@ -47,14 +47,17 @@ export const authorizeRoles = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.user.vaiTro)) {
-      console.log(`[authorizeRoles] Failed: user role "${req.user.vaiTro}" not allowed`);
+    // Chuẩn hóa vai trò: ngoại trừ "Admin", tất cả các vai trò khác đều được coi là "NhanVien"
+    const normalizedRole = req.user.vaiTro === "Admin" ? "Admin" : "NhanVien";
+
+    if (!roles.includes(req.user.vaiTro) && !roles.includes(normalizedRole)) {
+      console.log(`[authorizeRoles] Failed: user role "${req.user.vaiTro}" (normalized: "${normalizedRole}") not allowed`);
       return res.status(403).json({
         message: "Bạn không có quyền truy cập chức năng này",
       });
     }
 
-    console.log(`[authorizeRoles] Success`);
+    console.log(`[authorizeRoles] Success (User role: ${req.user.vaiTro}, normalized: ${normalizedRole})`);
     next();
   };
 };

@@ -9,10 +9,13 @@ export const loginService = async (tenDangNhap, matKhau) => {
       tk.tenDangNhap,
       tk.MatKhau,
       tk.vaiTro,
+      tk.trangThai AS taiKhoanTrangThai,
       nv.MaNhanVien,
       nv.HoTen,
       nv.Email,
-      nv.SDT
+      nv.SDT,
+      nv.HinhAnh,
+      nv.TrangThai AS nhanVienTrangThai
     FROM TaiKhoan tk
     LEFT JOIN NhanVien nv ON tk.MaTaiKhoan = nv.MaTaiKhoan
     WHERE tk.tenDangNhap = ?
@@ -48,6 +51,25 @@ export const loginService = async (tenDangNhap, matKhau) => {
     };
   }
 
+  // Kiểm tra trạng thái khóa tài khoản hoặc nhân viên đã nghỉ việc
+  if (user.taiKhoanTrangThai === "Khoa") {
+    return {
+      statusCode: 403,
+      data: {
+        message: "Tài khoản của bạn đã bị khóa",
+      },
+    };
+  }
+
+  if (user.nhanVienTrangThai === "Đã nghỉ việc") {
+    return {
+      statusCode: 403,
+      data: {
+        message: "Bạn đã bị cho nghỉ việc",
+      },
+    };
+  }
+
   const token = generateToken({
     MaTaiKhoan: user.MaTaiKhoan,
     MaNhanVien: user.MaNhanVien,
@@ -68,6 +90,8 @@ export const loginService = async (tenDangNhap, matKhau) => {
         HoTen: user.HoTen,
         Email: user.Email,
         SDT: user.SDT,
+        HinhAnh: user.HinhAnh,
+        TrangThai: user.nhanVienTrangThai,
       },
     },
   };
@@ -79,10 +103,13 @@ export const getMeService = async (maTaiKhoan) => {
       tk.MaTaiKhoan,
       tk.tenDangNhap,
       tk.vaiTro,
+      tk.trangThai AS taiKhoanTrangThai,
       nv.MaNhanVien,
       nv.HoTen,
       nv.Email,
-      nv.SDT
+      nv.SDT,
+      nv.HinhAnh,
+      nv.TrangThai AS nhanVienTrangThai
     FROM TaiKhoan tk
     LEFT JOIN NhanVien nv ON tk.MaTaiKhoan = nv.MaTaiKhoan
     WHERE tk.MaTaiKhoan = ?
@@ -99,10 +126,31 @@ export const getMeService = async (maTaiKhoan) => {
     };
   }
 
+  const user = rows[0];
+
+  // Kiểm tra trạng thái khóa tài khoản hoặc nhân viên đã nghỉ việc khi tải phiên đăng nhập
+  if (user.taiKhoanTrangThai === "Khoa") {
+    return {
+      statusCode: 403,
+      data: {
+        message: "Tài khoản của bạn đã bị khóa",
+      },
+    };
+  }
+
+  if (user.nhanVienTrangThai === "Đã nghỉ việc") {
+    return {
+      statusCode: 403,
+      data: {
+        message: "Bạn đã bị cho nghỉ việc",
+      },
+    };
+  }
+
   return {
     statusCode: 200,
     data: {
-      user: rows[0],
+      user,
     },
   };
 };

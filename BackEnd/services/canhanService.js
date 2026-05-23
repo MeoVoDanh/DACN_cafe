@@ -10,7 +10,8 @@ export const getThongTinCaNhanService = async (maTaiKhoan) => {
       nv.MaNhanVien,
       nv.HoTen,
       nv.Email,
-      nv.SDT
+      nv.SDT,
+      nv.HinhAnh
     FROM TaiKhoan tk
     LEFT JOIN NhanVien nv ON tk.MaTaiKhoan = nv.MaTaiKhoan
     WHERE tk.MaTaiKhoan = ?
@@ -48,7 +49,12 @@ export const getCaLamCuaToiService = async (maNhanVien) => {
       gioKetThuc,
       ngayLam,
       trangThai,
-      MaNhanVien
+      MaNhanVien,
+      CASE 
+        WHEN trangThai = 'Chờ duyệt' THEN 1
+        WHEN trangThai = 'Đã đăng ký' AND DATEDIFF(ngayLam, CURDATE()) >= 3 THEN 1
+        ELSE 0
+      END AS coTheHuy
     FROM CaLamViec
     WHERE MaNhanVien = ?
     ORDER BY ngayLam DESC, gioBatDau DESC
@@ -59,5 +65,79 @@ export const getCaLamCuaToiService = async (maNhanVien) => {
   return {
     statusCode: 200,
     data: rows,
+  };
+};
+
+export const getThongBaoCuaToiService = async (maNhanVien) => {
+  if (!maNhanVien) {
+    return {
+      statusCode: 400,
+      data: { message: "Tài khoản chưa liên kết nhân viên" },
+    };
+  }
+
+  const [rows] = await db.query(
+    `
+    SELECT 
+      maThongBao,
+      noiDung,
+      trangThai,
+      createdAt
+    FROM ThongBao
+    WHERE MaNhanVien = ?
+    ORDER BY createdAt DESC
+    `,
+    [maNhanVien]
+  );
+
+  return {
+    statusCode: 200,
+    data: rows,
+  };
+};
+
+export const docHetThongBaoService = async (maNhanVien) => {
+  if (!maNhanVien) {
+    return {
+      statusCode: 400,
+      data: { message: "Tài khoản chưa liên kết nhân viên" },
+    };
+  }
+
+  await db.query(
+    `
+    UPDATE ThongBao
+    SET trangThai = 'Đã đọc'
+    WHERE MaNhanVien = ? AND trangThai = 'Chưa đọc'
+    `,
+    [maNhanVien]
+  );
+
+  return {
+    statusCode: 200,
+    data: { message: "Đã đọc tất cả thông báo" },
+  };
+};
+
+export const updateAvatarService = async (maTaiKhoan, hinhAnh) => {
+  const [result] = await db.query(
+    `
+    UPDATE NhanVien
+    SET HinhAnh = ?
+    WHERE MaTaiKhoan = ?
+    `,
+    [hinhAnh, maTaiKhoan],
+  );
+
+  if (result.affectedRows === 0) {
+    return {
+      statusCode: 404,
+      data: { message: "Không tìm thấy thông tin nhân viên liên kết" },
+    };
+  }
+
+  return {
+    statusCode: 200,
+    data: { message: "Cập nhật ảnh đại diện thành công", HinhAnh: hinhAnh },
   };
 };

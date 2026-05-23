@@ -14,6 +14,7 @@ export const login = async (req, res) => {
 
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[authController.login Error]:", error);
     return res.status(500).json({
       message: "Lỗi server khi đăng nhập",
       error: error.message,
@@ -27,6 +28,7 @@ export const getMe = async (req, res) => {
 
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[authController.getMe Error]:", error);
     return res.status(500).json({
       message: "Lỗi server khi lấy thông tin người dùng",
       error: error.message,
