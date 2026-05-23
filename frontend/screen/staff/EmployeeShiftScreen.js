@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   Alert,
   SafeAreaView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   cancelShift,
   fetchAvailableShifts,
@@ -28,10 +30,15 @@ export default function EmployeeShiftScreen({ navigation }) {
     (state) => state.employeeShift,
   );
 
-  useEffect(() => {
-    dispatch(fetchAvailableShifts());
-    dispatch(fetchMyShifts());
-  }, [dispatch]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Fetch dữ liệu mỗi khi người dùng quay lại màn hình này
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchAvailableShifts());
+      dispatch(fetchMyShifts());
+    }, [dispatch])
+  );
 
   useEffect(() => {
     if (error) {
@@ -45,9 +52,13 @@ export default function EmployeeShiftScreen({ navigation }) {
     }
   }, [message]);
 
-  const reloadData = () => {
-    dispatch(fetchAvailableShifts());
-    dispatch(fetchMyShifts());
+  const reloadData = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      dispatch(fetchAvailableShifts()),
+      dispatch(fetchMyShifts()),
+    ]);
+    setRefreshing(false);
   };
 
   const handleRegister = async (maCa) => {
@@ -179,6 +190,14 @@ export default function EmployeeShiftScreen({ navigation }) {
         keyExtractor={(item) => item.maCa.toString()}
         renderItem={renderShift}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={reloadData}
+            tintColor="#4b3621"
+            colors={["#4b3621"]}
+          />
+        }
         ListEmptyComponent={
           <Text style={styles.emptyText}>
             {tab === "available"

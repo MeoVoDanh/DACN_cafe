@@ -11,6 +11,7 @@ export const getAllHoaDon = async (req, res) => {
     const result = await getAllHoaDonService();
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[hoadonController.getAllInvoice Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy danh sách hóa đơn",
       error: error.message,
@@ -23,6 +24,7 @@ export const getHoaDonById = async (req, res) => {
     const result = await getHoaDonByIdService(req.params.maHoaDon);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[hoadonController.getHoaDonById Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy chi tiết hóa đơn",
       error: error.message,
@@ -35,6 +37,7 @@ export const createHoaDon = async (req, res) => {
     const result = await createHoaDonService(req.body, req.user);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[hoadonController.createHoaDon Error]:", error);
     return res.status(500).json({
       message: "Lỗi tạo hóa đơn",
       error: error.message,
@@ -47,6 +50,7 @@ export const thanhToanHoaDon = async (req, res) => {
     const result = await thanhToanHoaDonService(req.params.maHoaDon);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[hoadonController.thanhToanHoaDon Error]:", error);
     return res.status(500).json({
       message: "Lỗi thanh toán hóa đơn",
       error: error.message,
@@ -59,6 +63,7 @@ export const deleteHoaDon = async (req, res) => {
     const result = await deleteHoaDonService(req.params.maHoaDon);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[hoadonController.deleteHoaDon Error]:", error);
     return res.status(500).json({
       message: "Lỗi xóa hóa đơn",
       error: error.message,

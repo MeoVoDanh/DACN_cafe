@@ -48,7 +48,7 @@ export default function DashboardScreen({ navigation }) {
                   <FontAwesome5 name="coffee" size={24} color="#4b3621" />
                 </View>
                 <View style={styles.headerTextGroup}>
-                  <Text style={styles.title}>COFFEE SHOP</Text>
+                  <Text style={styles.title}>O’Leon Cat Coffee</Text>
                   <Text style={styles.subtitle}>Hệ Thống Quản Lý</Text>
                 </View>
               </View>
@@ -60,7 +60,7 @@ export default function DashboardScreen({ navigation }) {
                 activeOpacity={0.7}
               >
                 <FontAwesome5 name="sign-out-alt" size={12} color="#fff" />
-                <Text style={styles.logoutText}>Thoát</Text>
+                <Text style={styles.logoutText}>Đăng xuất</Text>
               </TouchableOpacity>
             </View>
 

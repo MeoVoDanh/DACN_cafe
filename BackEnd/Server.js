@@ -16,7 +16,8 @@ const app = express();
 
 app.use(cors());
 app.use((req, res, next) => {
-  console.log(`[Request] ${req.method} ${req.url} - Auth Header: ${req.headers.authorization}`);
+  const authHeader = req.headers.authorization ? req.headers.authorization : "None";
+  console.log(`[Request] ${req.method} ${req.url} - Auth Header: ${authHeader}`);
   next();
 });
 app.use(express.json());

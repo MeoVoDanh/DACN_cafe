@@ -9,6 +9,7 @@ export const getTongDoanhThu = async (req, res) => {
     const result = await getTongDoanhThuService();
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[doanhthuController.getTongDoanhThu Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy tổng doanh thu",
       error: error.message,
@@ -21,6 +22,7 @@ export const getDoanhThuTheoNgay = async (req, res) => {
     const result = await getDoanhThuTheoNgayService();
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[doanhthuController.getDoanhThuTheoNgay Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy doanh thu theo ngày",
       error: error.message,
@@ -33,6 +35,7 @@ export const getTopDoUong = async (req, res) => {
     const result = await getTopDoUongService();
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[doanhthuController.getTopDoUong Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy top đồ uống",
       error: error.message,

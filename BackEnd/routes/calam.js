@@ -10,6 +10,8 @@ import {
   updateCaLam,
   getCaLamByNgay,
   saveCaLamByNgay,
+  getPendingShifts,
+  pheDuyetCaLam,
 } from "../controllers/calamController.js";
 import { authorizeRoles, verifyToken } from "../middleware/authMiddleware.js";
 
@@ -23,6 +25,8 @@ router.get(
 );
 
 router.get("/", verifyToken, authorizeRoles("Admin"), getAllCaLam);
+
+router.get("/cho-duyet", verifyToken, authorizeRoles("Admin"), getPendingShifts);
 
 router.get(
   "/:maCa",
@@ -50,6 +54,8 @@ router.patch(
 router.put("/:maCa", verifyToken, authorizeRoles("Admin"), updateCaLam);
 
 router.delete("/:maCa", verifyToken, authorizeRoles("Admin"), deleteCaLam);
+
+router.patch("/:maCa/phe-duyet", verifyToken, authorizeRoles("Admin"), pheDuyetCaLam);
 
 router.get("/ngay/:ngay", verifyToken, authorizeRoles("Admin"), getCaLamByNgay);
 router.post("/ngay/:ngay", verifyToken, authorizeRoles("Admin"), saveCaLamByNgay);

@@ -66,7 +66,7 @@ export default function LoginScreen({ navigation }) {
             <FontAwesome5 name="store" size={24} color="#fff" />
           </View>
 
-          <Text style={styles.brand}>CAFE MANAGEMENT</Text>
+          <Text style={styles.brand}>O’Leon Cat Coffee</Text>
           <Text style={styles.subTitle}>HỆ THỐNG ĐĂNG NHẬP NỘI BỘ</Text>
 
           <View style={styles.inputGroup}>

@@ -7,9 +7,9 @@ export const getAllNhanVienService = async () => {
       nv.MaNhanVien,
       nv.HoTen,
       nv.Email,
-      nv.SDT,
       nv.SoCCCD,
       nv.TrangThai,
+      nv.HinhAnh,
       tk.MaTaiKhoan,
       tk.tenDangNhap,
       tk.vaiTro
@@ -34,6 +34,7 @@ export const getNhanVienByIdService = async (maNhanVien) => {
       nv.SDT,
       nv.SoCCCD,
       nv.TrangThai,
+      nv.HinhAnh,
       tk.MaTaiKhoan,
       tk.tenDangNhap,
       tk.vaiTro
@@ -58,7 +59,7 @@ export const getNhanVienByIdService = async (maNhanVien) => {
 };
 
 export const createNhanVienService = async (data) => {
-  const { HoTen, Email, SDT, SoCCCD, TrangThai, tenDangNhap, MatKhau, vaiTro } = data;
+  const { HoTen, Email, SDT, SoCCCD, TrangThai, tenDangNhap, MatKhau, vaiTro, HinhAnh } = data;
 
   const connection = await db.getConnection();
 
@@ -79,10 +80,10 @@ export const createNhanVienService = async (data) => {
 
     const [employeeResult] = await connection.query(
       `
-      INSERT INTO NhanVien (HoTen, Email, SDT, SoCCCD, TrangThai, MaTaiKhoan)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO NhanVien (HoTen, Email, SDT, SoCCCD, TrangThai, MaTaiKhoan, HinhAnh)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       `,
-      [HoTen, Email || null, SDT || null, SoCCCD || null, "Đang làm việc", maTaiKhoan],
+      [HoTen, Email || null, SDT || null, SoCCCD || null, "Đang làm việc", maTaiKhoan, HinhAnh || null],
     );
 
     await connection.commit();
@@ -112,7 +113,10 @@ export const createNhanVienService = async (data) => {
 };
 
 export const updateNhanVienService = async (maNhanVien, data) => {
-  const { HoTen, Email, SDT, SoCCCD, TrangThai, vaiTro } = data;
+  const { HoTen, Email, SDT, SoCCCD, TrangThai, vaiTro, HinhAnh } = data;
+
+  // Tự động Khóa tài khoản nếu cho nghỉ việc, ngược lại kích hoạt HoatDong
+  const accountStatus = TrangThai === "Đã nghỉ việc" ? "Khoa" : "HoatDong";
 
   const [result] = await db.query(
     `
@@ -124,7 +128,9 @@ export const updateNhanVienService = async (maNhanVien, data) => {
       nv.SDT = ?,
       nv.SoCCCD = ?,
       nv.TrangThai = ?,
-      tk.vaiTro = ?
+      tk.vaiTro = ?,
+      nv.HinhAnh = ?,
+      tk.trangThai = ?
     WHERE nv.MaNhanVien = ?
     `,
     [
@@ -134,6 +140,8 @@ export const updateNhanVienService = async (maNhanVien, data) => {
       SoCCCD || null,
       TrangThai || "Đang làm việc",
       vaiTro || "NhanVien",
+      HinhAnh || null,
+      accountStatus,
       maNhanVien,
     ],
   );

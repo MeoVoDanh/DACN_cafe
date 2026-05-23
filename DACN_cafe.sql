@@ -31,6 +31,7 @@ CREATE TABLE NhanVien (
     DiaChi VARCHAR(255) NULL COMMENT 'Địa chỉ nhân viên',
     MaTaiKhoan INT NOT NULL UNIQUE COMMENT 'Khóa ngoại liên kết tài khoản',
     TrangThai ENUM('Đang làm việc', 'Đã nghỉ việc') NOT NULL DEFAULT 'Đang làm việc' COMMENT 'Trạng thái nhân viên',
+    HinhAnh VARCHAR(255) DEFAULT NULL COMMENT 'Ảnh đại diện của nhân viên',
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -54,6 +55,7 @@ CREATE TABLE CaLamViec (
 
     trangThai ENUM(
         'Chưa có nhân viên',
+        'Chờ duyệt',
         'Đã đăng ký',
         'Đang làm',
         'Đã kết thúc',
@@ -81,6 +83,22 @@ CREATE TABLE CaLamViec (
     CONSTRAINT chk_gio_lam
         CHECK (gioKetThuc > gioBatDau)
 ) COMMENT 'Bảng ca làm việc do admin tạo và nhân viên đăng ký';
+
+-- ==========================================
+-- 3.5 BẢNG THÔNG BÁO
+-- ==========================================
+CREATE TABLE ThongBao (
+    maThongBao INT AUTO_INCREMENT PRIMARY KEY COMMENT 'Khóa chính thông báo',
+    noiDung VARCHAR(255) NOT NULL COMMENT 'Nội dung thông báo',
+    trangThai ENUM('Chưa đọc', 'Đã đọc') NOT NULL DEFAULT 'Chưa đọc' COMMENT 'Trạng thái đọc',
+    MaNhanVien INT NOT NULL COMMENT 'Nhân viên nhận thông báo',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_thongbao_nhanvien
+        FOREIGN KEY (MaNhanVien)
+        REFERENCES NhanVien(MaNhanVien)
+        ON DELETE CASCADE
+) COMMENT 'Bảng lưu thông báo cho nhân viên';
 
 -- ==========================================
 -- 4. BẢNG HÓA ĐƠN

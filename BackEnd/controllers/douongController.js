@@ -12,6 +12,7 @@ export const getAllDoUong = async (req, res) => {
 
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[douongController.getAllDoUong Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy danh sách đồ uống",
       error: error.message,
@@ -27,6 +28,7 @@ export const getDoUongById = async (req, res) => {
 
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[douongController.getDoUongById Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy chi tiết đồ uống",
       error: error.message,
@@ -48,6 +50,7 @@ export const createDoUong = async (req, res) => {
 
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[douongController.createDoUong Error]:", error);
     return res.status(500).json({
       message: "Lỗi thêm đồ uống",
       error: error.message,
@@ -70,6 +73,7 @@ export const updateDoUong = async (req, res) => {
 
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[douongController.updateDoUong Error]:", error);
     return res.status(500).json({
       message: "Lỗi cập nhật đồ uống",
       error: error.message,
@@ -85,6 +89,7 @@ export const deleteDoUong = async (req, res) => {
 
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[douongController.deleteDoUong Error]:", error);
     return res.status(500).json({
       message: "Lỗi xóa đồ uống",
       error: error.message,

@@ -9,6 +9,7 @@ import DashboardScreen from "../screen/manager/DashboardScreen";
 import EmployeeListScreen from "../screen/manager/EmployeeListScreen";
 import EmployeeScreen from "../screen/manager/EmployeeScreen";
 import ShiftScreen from "../screen/manager/ShiftScreen";
+import ShiftApprovalScreen from "../screen/manager/ShiftApprovalScreen";
 import MenuScreen from "../screen/manager/MenuScreen";
 import RevenueScreen from "../screen/manager/RevenueScreen";
 
@@ -40,6 +41,7 @@ const AppNavigator = () => {
 
             <Stack.Screen name="EmployeeScreen" component={EmployeeScreen} />
             <Stack.Screen name="ShiftScreen" component={ShiftScreen} />
+            <Stack.Screen name="ShiftApprovalScreen" component={ShiftApprovalScreen} />
             <Stack.Screen name="MenuScreen" component={MenuScreen} />
             <Stack.Screen name="RevenueScreen" component={RevenueScreen} />
           </>

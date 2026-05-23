@@ -11,6 +11,7 @@ export const getAllNhanVien = async (req, res) => {
     const result = await getAllNhanVienService();
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[nhanvienController.getAllNhanVien Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy danh sách nhân viên",
       error: error.message,
@@ -23,6 +24,7 @@ export const getNhanVienById = async (req, res) => {
     const result = await getNhanVienByIdService(req.params.maNhanVien);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[nhanvienController.getNhanVienById Error]:", error);
     return res.status(500).json({
       message: "Lỗi lấy chi tiết nhân viên",
       error: error.message,
@@ -43,6 +45,7 @@ export const createNhanVien = async (req, res) => {
     const result = await createNhanVienService(req.body);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[nhanvienController.createNhanVien Error]:", error);
     return res.status(500).json({
       message: "Lỗi thêm nhân viên",
       error: error.message,
@@ -63,6 +66,7 @@ export const updateNhanVien = async (req, res) => {
     const result = await updateNhanVienService(req.params.maNhanVien, req.body);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[nhanvienController.updateNhanVien Error]:", error);
     return res.status(500).json({
       message: "Lỗi cập nhật nhân viên",
       error: error.message,
@@ -75,6 +79,7 @@ export const deleteNhanVien = async (req, res) => {
     const result = await deleteNhanVienService(req.params.maNhanVien);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
+    console.error("[nhanvienController.deleteNhanVien Error]:", error);
     return res.status(500).json({
       message: "Lỗi xóa nhân viên",
       error: error.message,
