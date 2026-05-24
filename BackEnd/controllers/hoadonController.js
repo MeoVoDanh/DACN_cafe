@@ -4,6 +4,8 @@ import {
   getAllHoaDonService,
   getHoaDonByIdService,
   thanhToanHoaDonService,
+  updateHoaDonService,
+  huyHoaDonService,
 } from "../services/hoadonService.js";
 
 export const getAllHoaDon = async (req, res) => {
@@ -47,7 +49,7 @@ export const createHoaDon = async (req, res) => {
 
 export const thanhToanHoaDon = async (req, res) => {
   try {
-    const result = await thanhToanHoaDonService(req.params.maHoaDon);
+    const result = await thanhToanHoaDonService(req.params.maHoaDon, req.user);
     return res.status(result.statusCode).json(result.data);
   } catch (error) {
     console.error("[hoadonController.thanhToanHoaDon Error]:", error);
@@ -66,6 +68,32 @@ export const deleteHoaDon = async (req, res) => {
     console.error("[hoadonController.deleteHoaDon Error]:", error);
     return res.status(500).json({
       message: "Lỗi xóa hóa đơn",
+      error: error.message,
+    });
+  }
+};
+
+export const updateHoaDon = async (req, res) => {
+  try {
+    const result = await updateHoaDonService(req.params.maHoaDon, req.body, req.user);
+    return res.status(result.statusCode).json(result.data);
+  } catch (error) {
+    console.error("[hoadonController.updateHoaDon Error]:", error);
+    return res.status(500).json({
+      message: "Lỗi sửa hóa đơn",
+      error: error.message,
+    });
+  }
+};
+
+export const huyHoaDon = async (req, res) => {
+  try {
+    const result = await huyHoaDonService(req.params.maHoaDon, req.user);
+    return res.status(result.statusCode).json(result.data);
+  } catch (error) {
+    console.error("[hoadonController.huyHoaDon Error]:", error);
+    return res.status(500).json({
+      message: "Lỗi hủy hóa đơn",
       error: error.message,
     });
   }

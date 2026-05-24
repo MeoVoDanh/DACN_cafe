@@ -24,6 +24,43 @@ export const getAllCaLamService = async () => {
 };
 
 export const getCaLamConTrongService = async () => {
+  // Tự động khởi tạo 3 ca làm trống (Ca Sáng, Ca Chiều, Ca Tối) cho 14 ngày tới nếu chưa tồn tại
+  const today = new Date();
+  const shiftNames = ["Ca Sáng", "Ca Chiều", "Ca Tối"];
+  const shiftTimes = {
+    "Ca Sáng": { start: "07:00:00", end: "12:00:00" },
+    "Ca Chiều": { start: "12:00:00", end: "17:00:00" },
+    "Ca Tối": { start: "17:00:00", end: "22:00:00" },
+  };
+
+  for (let i = 0; i < 14; i++) {
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + i);
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    for (const tenCa of shiftNames) {
+      // Kiểm tra xem ca cụ thể này đã tồn tại trong ngày này chưa
+      const [existing] = await db.query(
+        "SELECT maCa FROM CaLamViec WHERE ngayLam = ? AND tenCa = ?",
+        [dateStr, tenCa]
+      );
+
+      if (existing.length === 0) {
+        const times = shiftTimes[tenCa];
+        const gioBatDau = `${dateStr} ${times.start}`;
+        const gioKetThuc = `${dateStr} ${times.end}`;
+        await db.query(
+          `INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien)
+           VALUES (?, ?, ?, ?, 'Chưa có nhân viên', NULL)`,
+          [tenCa, gioBatDau, gioKetThuc, dateStr]
+        );
+      }
+    }
+  }
+
   const [rows] = await db.query(`
     SELECT 
       maCa,
@@ -390,7 +427,7 @@ export const saveCaLamByNgayService = async (ngayLam, shiftsData) => {
 
     // 4. Lưu danh sách phân ca mới
     for (const shift of shiftsData) {
-      const { tenCa, employeeIds } = shift;
+      const { tenCa, employeeIds, ghiChu } = shift;
       const times = shiftTimes[tenCa] || { start: "00:00:00", end: "00:00:00" };
       const gioBatDau = `${ngayLam} ${times.start}`;
       const gioKetThuc = `${ngayLam} ${times.end}`;
@@ -399,20 +436,20 @@ export const saveCaLamByNgayService = async (ngayLam, shiftsData) => {
         // Ca trống không có nhân viên
         await connection.query(
           `
-          INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien)
-          VALUES (?, ?, ?, ?, 'Chưa có nhân viên', NULL)
+          INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien, ghiChu)
+          VALUES (?, ?, ?, ?, 'Chưa có nhân viên', NULL, ?)
           `,
-          [tenCa, gioBatDau, gioKetThuc, ngayLam],
+          [tenCa, gioBatDau, gioKetThuc, ngayLam, ghiChu || null],
         );
       } else {
         // Ca đã được giao cho một hoặc nhiều nhân viên
         for (const empId of employeeIds) {
           await connection.query(
             `
-            INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien)
-            VALUES (?, ?, ?, ?, 'Đã đăng ký', ?)
+            INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien, ghiChu)
+            VALUES (?, ?, ?, ?, 'Đã đăng ký', ?, ?)
             `,
-            [tenCa, gioBatDau, gioKetThuc, ngayLam, empId],
+            [tenCa, gioBatDau, gioKetThuc, ngayLam, empId, ghiChu || null],
           );
         }
       }

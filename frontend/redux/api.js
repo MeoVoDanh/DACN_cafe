@@ -1,14 +1,10 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Nếu chạy Expo trên điện thoại thật, dùng IP máy tính của bạn
-// Địa chỉ IP hiện tại của máy tính bạn là: 192.168.1.79
-const API_BASE_URL = "http://192.168.1.79:3000/api";
+//dùng trên máy mình thì chỉ dùng localhost
+//con sài trên điện thoại thì dùng địa chị ip của máy và tắt firewall
+const API_BASE_URL = "http://192.168.2.145:3000/api";
 
-// Nếu chạy web hoặc emulator có thể tùy trường hợp:
-// const API_BASE_URL = "http://localhost:3000/api";
-// Android emulator thường dùng:
-// const API_BASE_URL = "http://10.0.2.2:3000/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

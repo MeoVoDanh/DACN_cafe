@@ -16,6 +16,15 @@ import { fetchInvoices } from "../../redux/invoiceSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 import api from "../../redux/api"; // Import api để lấy chi tiết món ăn trong hóa đơn
 
+const getLocalDateString = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  const y = date.getFullYear();
+  const m = (date.getMonth() + 1).toString().padStart(2, "0");
+  const d = date.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 export default function MyOrderCountScreen({ navigation }) {
   const dispatch = useDispatch();
 
@@ -28,8 +37,8 @@ export default function MyOrderCountScreen({ navigation }) {
   // Trạng thái hiển thị Lịch chọn ngày (Calendar Modal)
   const [showCalendar, setShowCalendar] = useState(false);
   const [activeDateFilter, setActiveDateFilter] = useState(null); // Ngày được chọn để lọc (YYYY-MM-DD)
-  const [selectedMonth, setSelectedMonth] = useState(5); // Tháng hiện tại để hiển thị trên lịch
-  const [selectedYear, setSelectedYear] = useState(2026); // Năm hiện tại
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // Tháng hiện tại để hiển thị trên lịch
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear()); // Năm hiện tại
 
   // Trạng thái hiển thị Chi tiết Hóa đơn (Details Modal)
   const [showDetails, setShowDetails] = useState(false);
@@ -53,7 +62,7 @@ export default function MyOrderCountScreen({ navigation }) {
     const dates = new Set();
     myInvoices.forEach((item) => {
       const d = new Date(item.createdAt || item.ngaylap);
-      const dateStr = d.toISOString().split("T")[0]; // YYYY-MM-DD
+      const dateStr = getLocalDateString(d); // YYYY-MM-DD
       dates.add(dateStr);
     });
     return dates;
@@ -82,14 +91,15 @@ export default function MyOrderCountScreen({ navigation }) {
 
   // Tính toán thống kê: Đơn trong ngày và Đơn trong tháng
   const stats = useMemo(() => {
-    const todayStr = "2026-05-23"; // Giả lập hôm nay theo metadata
-    const currentMonth = 5;
-    const currentYear = 2026;
+    const today = new Date();
+    const todayStr = getLocalDateString(today);
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
 
     // 1. Đơn trong ngày hôm nay
     const todayInvoices = myInvoices.filter((item) => {
       const d = new Date(item.createdAt || item.ngaylap);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = getLocalDateString(d);
       return dateStr === todayStr;
     });
     const todayOrdersCount = todayInvoices.length;
@@ -97,7 +107,7 @@ export default function MyOrderCountScreen({ navigation }) {
       .filter((item) => item.trangthaithanhtoan === "Đã thanh toán")
       .reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
 
-    // 2. Đơn trong tháng 5/2026
+    // 2. Đơn trong tháng
     const monthlyInvoices = myInvoices.filter((item) => {
       const d = new Date(item.createdAt || item.ngaylap);
       return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
@@ -117,16 +127,17 @@ export default function MyOrderCountScreen({ navigation }) {
 
   // Danh sách hóa đơn sau khi áp dụng bộ lọc hiển thị ở dưới
   const displayedInvoices = useMemo(() => {
-    const todayStr = "2026-05-23";
-    const currentMonth = 5;
-    const currentYear = 2026;
+    const today = new Date();
+    const todayStr = getLocalDateString(today);
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
 
     let result = myInvoices;
 
     if (listFilter === "today") {
       result = result.filter((item) => {
         const d = new Date(item.createdAt || item.ngaylap);
-        const dateStr = d.toISOString().split("T")[0];
+        const dateStr = getLocalDateString(d);
         return dateStr === todayStr;
       });
     } else if (listFilter === "month") {
@@ -138,7 +149,7 @@ export default function MyOrderCountScreen({ navigation }) {
       if (activeDateFilter) {
         result = result.filter((item) => {
           const d = new Date(item.createdAt || item.ngaylap);
-          const dateStr = d.toISOString().split("T")[0];
+          const dateStr = getLocalDateString(d);
           return dateStr === activeDateFilter;
         });
       }
@@ -301,7 +312,12 @@ export default function MyOrderCountScreen({ navigation }) {
               activeOpacity={0.85}
             >
               <View style={styles.invoiceHeader}>
-                <Text style={styles.invoiceTitle}>Hóa đơn #{item.maHoaDon}</Text>
+                <View>
+                  <Text style={styles.invoiceTitle}>Hóa đơn #{item.maHoaDon}</Text>
+                  <Text style={styles.staffName}>
+                    <FontAwesome5 name="user-edit" size={10} color="#8d6e63" /> Nhân viên: {item.HoTen || "Không rõ"}
+                  </Text>
+                </View>
                 <View style={[styles.statusBadge, isPaid ? styles.paidBadge : styles.unpaidBadge]}>
                   <Text style={styles.statusText}>{item.trangthaithanhtoan}</Text>
                 </View>
@@ -551,6 +567,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f1e9",
+    height: Platform.OS === "web" ? "100vh" : "100%",
+    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
   },
   loadingContainer: {
     flex: 1,
@@ -685,6 +703,11 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#4b3621",
     fontSize: 16,
+  },
+  staffName: {
+    fontSize: 11,
+    color: "#8d6e63",
+    marginTop: 4,
   },
   statusBadge: {
     paddingHorizontal: 8,

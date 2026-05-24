@@ -52,6 +52,17 @@ export default function ShiftApprovalScreen({ navigation }) {
 
   const handleAction = (maCa, action, employeeName, shiftName) => {
     const actionText = action === "approve" ? "phê duyệt" : "từ chối";
+    if (Platform.OS === "web") {
+      const confirmAction = window.confirm(`Bạn có chắc chắn muốn ${actionText} yêu cầu đăng ký [${shiftName}] của [${employeeName}] không?`);
+      if (confirmAction) {
+        dispatch(pheDuyetCaLam({ maCa, action })).then((result) => {
+          if (pheDuyetCaLam.fulfilled.match(result)) {
+            dispatch(fetchPendingShifts());
+          }
+        });
+      }
+      return;
+    }
     Alert.alert(
       "Xác nhận",
       `Bạn có chắc chắn muốn ${actionText} yêu cầu đăng ký [${shiftName}] của [${employeeName}] không?`,
@@ -197,6 +208,7 @@ export default function ShiftApprovalScreen({ navigation }) {
             data={pendingShifts}
             keyExtractor={(item) => String(item.maCa)}
             renderItem={renderPendingItem}
+            style={styles.list}
             contentContainerStyle={[styles.listContent, isWeb && styles.listContentWeb]}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#4b3621" />
@@ -227,6 +239,9 @@ const styles = StyleSheet.create({
     height: Platform.OS === "web" ? "100vh" : "100%",
     maxHeight: Platform.OS === "web" ? "100vh" : "100%",
     overflow: "hidden",
+  },
+  list: {
+    flex: 1,
   },
   header: {
     flexDirection: "row",

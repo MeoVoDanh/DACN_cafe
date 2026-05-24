@@ -29,6 +29,9 @@ export default function ShiftScreen({ navigation }) {
   const [sangEmployees, setSangEmployees] = useState([]);
   const [chieuEmployees, setChieuEmployees] = useState([]);
   const [toiEmployees, setToiEmployees] = useState([]);
+  const [sangGhiChu, setSangGhiChu] = useState("");
+  const [chieuGhiChu, setChieuGhiChu] = useState("");
+  const [toiGhiChu, setToiGhiChu] = useState("");
 
   // Modal employee picker states
   const [employeePickerVisible, setEmployeePickerVisible] = useState(false);
@@ -53,8 +56,16 @@ export default function ShiftScreen({ navigation }) {
     const sang = [];
     const chieu = [];
     const toi = [];
+    let sangNote = "";
+    let chieuNote = "";
+    let toiNote = "";
+
     if (shifts && Array.isArray(shifts)) {
       shifts.forEach((item) => {
+        if (item.tenCa === "Ca Sáng" && item.ghiChu) sangNote = item.ghiChu;
+        if (item.tenCa === "Ca Chiều" && item.ghiChu) chieuNote = item.ghiChu;
+        if (item.tenCa === "Ca Tối" && item.ghiChu) toiNote = item.ghiChu;
+
         if (item.MaNhanVien) {
           const empObj = {
             MaNhanVien: item.MaNhanVien,
@@ -70,14 +81,113 @@ export default function ShiftScreen({ navigation }) {
     setSangEmployees(sang);
     setChieuEmployees(chieu);
     setToiEmployees(toi);
+    setSangGhiChu(sangNote);
+    setChieuGhiChu(chieuNote);
+    setToiGhiChu(toiNote);
   }, [shifts]);
 
-  const handleSwitchDate = () => {
-    if (!ngayLam.trim()) {
-      Alert.alert("Thông báo", "Vui lòng chọn hoặc nhập ngày hợp lệ (YYYY-MM-DD)");
+  const getLocalDateString = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const handlePrevDay = () => {
+    const parts = ngayLam.split("-");
+    let currentDate = new Date();
+    if (parts.length === 3) {
+      currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    currentDate.setDate(currentDate.getDate() - 1);
+    const prevDateStr = getLocalDateString(currentDate);
+    setNgayLam(prevDateStr);
+    dispatch(fetchShiftsByDate(prevDateStr));
+  };
+
+  const handleNextDay = () => {
+    const parts = ngayLam.split("-");
+    let currentDate = new Date();
+    if (parts.length === 3) {
+      currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+    const nextDateStr = getLocalDateString(currentDate);
+    setNgayLam(nextDateStr);
+    dispatch(fetchShiftsByDate(nextDateStr));
+  };
+
+  const handleDateChangeWithConfirmation = (newDateStr) => {
+    if (!newDateStr) return;
+    if (Platform.OS === "web") {
+      const confirmChange = window.confirm(`Bạn có muốn chuyển sang xem lịch ngày ${formatDateDisplay(newDateStr)} không?`);
+      if (confirmChange) {
+        setNgayLam(newDateStr);
+        dispatch(fetchShiftsByDate(newDateStr));
+      }
       return;
     }
-    dispatch(fetchShiftsByDate(ngayLam.trim()));
+    Alert.alert(
+      "Xác nhận",
+      `Bạn có muốn chuyển sang xem lịch ngày ${formatDateDisplay(newDateStr)} không?`,
+      [
+        {
+          text: "Hủy",
+          style: "cancel",
+        },
+        {
+          text: "Chuyển ngày",
+          onPress: () => {
+            setNgayLam(newDateStr);
+            dispatch(fetchShiftsByDate(newDateStr));
+          },
+        },
+      ]
+    );
+  };
+
+  const formatDateDisplay = (dateStr) => {
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
+  };
+
+  const formatDateDisplayLarge = (dateStr) => {
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return dateStr;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const date = new Date(year, month, day);
+    const days = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+    const dayName = days[date.getDay()];
+    return `${dayName}, ${parts[2]}/${parts[1]}/${parts[0]}`;
+  };
+
+  const handleOpenDatePicker = () => {
+    if (!isWeb) {
+      Alert.prompt(
+        "Chọn ngày",
+        "Nhập ngày muốn chuyển (YYYY-MM-DD):",
+        [
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Đồng ý",
+            onPress: (val) => {
+              if (val && /^\d{4}-\d{2}-\d{2}$/.test(val.trim())) {
+                 handleDateChangeWithConfirmation(val.trim());
+              } else {
+                 Alert.alert("Thông báo", "Ngày nhập không đúng định dạng YYYY-MM-DD");
+              }
+            }
+          }
+        ],
+        "plain-text",
+        ngayLam
+      );
+    }
   };
 
   const handleOpenPicker = (shiftName) => {
@@ -124,14 +234,17 @@ export default function ShiftScreen({ navigation }) {
       {
         tenCa: "Ca Sáng",
         employeeIds: sangEmployees.map((e) => e.MaNhanVien),
+        ghiChu: sangGhiChu,
       },
       {
         tenCa: "Ca Chiều",
         employeeIds: chieuEmployees.map((e) => e.MaNhanVien),
+        ghiChu: chieuGhiChu,
       },
       {
         tenCa: "Ca Tối",
         employeeIds: toiEmployees.map((e) => e.MaNhanVien),
+        ghiChu: toiGhiChu,
       },
     ];
 
@@ -181,39 +294,39 @@ export default function ShiftScreen({ navigation }) {
         </View>
 
         {/* Date Selector Row */}
-        <View style={styles.dateSelectorRow}>
-          <View style={styles.dateInputWrapper}>
-            <FontAwesome5 name="calendar-alt" size={16} color="#8d6e63" style={styles.calendarIcon} />
+        <View style={styles.dateSelectorContainer}>
+          <TouchableOpacity onPress={handlePrevDay} style={styles.arrowBtn} activeOpacity={0.7}>
+            <FontAwesome5 name="chevron-left" size={18} color="#4b3621" />
+          </TouchableOpacity>
+
+          <View style={styles.dateCenterWrapper}>
+            <TouchableOpacity onPress={handleOpenDatePicker} style={styles.dateTextTrigger} activeOpacity={0.7}>
+              <FontAwesome5 name="calendar-alt" size={18} color="#8d6e63" style={styles.centerCalendarIcon} />
+              <Text style={styles.dateTextLarge}>
+                {formatDateDisplayLarge(ngayLam)}
+              </Text>
+            </TouchableOpacity>
+
             {isWeb ? (
               <input
                 type="date"
                 value={ngayLam}
-                onChange={(e) => setNgayLam(e.target.value)}
+                onChange={(e) => handleDateChangeWithConfirmation(e.target.value)}
                 style={{
-                  flex: 1,
-                  border: "none",
-                  color: "#4b3621",
-                  fontSize: 14,
-                  fontFamily: "inherit",
-                  outline: "none",
-                  backgroundColor: "transparent",
-                  paddingVertical: 8,
+                  position: "absolute",
+                  opacity: 0,
+                  width: "100%",
+                  height: "100%",
+                  top: 0,
+                  left: 0,
+                  cursor: "pointer",
                 }}
               />
-            ) : (
-              <TextInput
-                style={styles.dateInput}
-                value={ngayLam}
-                onChangeText={setNgayLam}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#aaa"
-              />
-            )}
+            ) : null}
           </View>
 
-          <TouchableOpacity style={styles.switchDateBtn} onPress={handleSwitchDate}>
-            <FontAwesome5 name="search" size={12} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={styles.switchDateBtnText}>Chuyển ngày</Text>
+          <TouchableOpacity onPress={handleNextDay} style={styles.arrowBtn} activeOpacity={0.7}>
+            <FontAwesome5 name="chevron-right" size={18} color="#4b3621" />
           </TouchableOpacity>
         </View>
 
@@ -244,6 +357,16 @@ export default function ShiftScreen({ navigation }) {
                 
                 <View style={styles.shiftCardBody}>
                   {renderEmployeesTable("Ca Sáng", sangEmployees)}
+                  <View style={styles.noteInputWrapper}>
+                    <FontAwesome5 name="edit" size={12} color="#8d6e63" style={styles.noteIcon} />
+                    <TextInput
+                      style={styles.noteInput}
+                      value={sangGhiChu}
+                      onChangeText={setSangGhiChu}
+                      placeholder="Thêm ghi chú ca sáng..."
+                      placeholderTextColor="#aaa"
+                    />
+                  </View>
                   <TouchableOpacity
                     style={styles.addEmpBtn}
                     onPress={() => handleOpenPicker("Ca Sáng")}
@@ -268,6 +391,16 @@ export default function ShiftScreen({ navigation }) {
 
                 <View style={styles.shiftCardBody}>
                   {renderEmployeesTable("Ca Chiều", chieuEmployees)}
+                  <View style={styles.noteInputWrapper}>
+                    <FontAwesome5 name="edit" size={12} color="#8d6e63" style={styles.noteIcon} />
+                    <TextInput
+                      style={styles.noteInput}
+                      value={chieuGhiChu}
+                      onChangeText={setChieuGhiChu}
+                      placeholder="Thêm ghi chú ca chiều..."
+                      placeholderTextColor="#aaa"
+                    />
+                  </View>
                   <TouchableOpacity
                     style={styles.addEmpBtn}
                     onPress={() => handleOpenPicker("Ca Chiều")}
@@ -292,6 +425,16 @@ export default function ShiftScreen({ navigation }) {
 
                 <View style={styles.shiftCardBody}>
                   {renderEmployeesTable("Ca Tối", toiEmployees)}
+                  <View style={styles.noteInputWrapper}>
+                    <FontAwesome5 name="edit" size={12} color="#8d6e63" style={styles.noteIcon} />
+                    <TextInput
+                      style={styles.noteInput}
+                      value={toiGhiChu}
+                      onChangeText={setToiGhiChu}
+                      placeholder="Thêm ghi chú ca tối..."
+                      placeholderTextColor="#aaa"
+                    />
+                  </View>
                   <TouchableOpacity
                     style={styles.addEmpBtn}
                     onPress={() => handleOpenPicker("Ca Tối")}
@@ -453,44 +596,54 @@ const styles = StyleSheet.create({
     color: "#8d6e63",
     marginTop: 2,
   },
-  dateSelectorRow: {
-    flexDirection: "row",
-    gap: 12,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  dateInputWrapper: {
-    flex: 1,
+  // Date Selector Premium Style
+  dateSelectorContainer: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#eadfd3",
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    gap: 16,
   },
-  calendarIcon: {
-    marginRight: 10,
+  arrowBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  dateInput: {
-    flex: 1,
-    color: "#4b3621",
-    fontSize: 14,
-    paddingVertical: 10,
-  },
-  switchDateBtn: {
-    flexDirection: "row",
-    backgroundColor: "#8b4513",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+  dateCenterWrapper: {
+    position: "relative",
     alignItems: "center",
     justifyContent: "center",
+    marginHorizontal: 12,
   },
-  switchDateBtnText: {
-    color: "#fff",
+  dateTextTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+    width: "100%",
+  },
+  centerCalendarIcon: {
+    marginRight: 10,
+  },
+  dateTextLarge: {
+    fontSize: 16,
     fontWeight: "bold",
-    fontSize: 13,
+    color: "#4b3621",
+    textAlign: "center",
   },
   loadingContainer: {
     flex: 1,
@@ -734,5 +887,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#8d6e63",
     marginTop: 2,
+  },
+  noteInputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#faf6f0",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  noteIcon: {
+    marginRight: 8,
+  },
+  noteInput: {
+    flex: 1,
+    color: "#4b3621",
+    fontSize: 12,
+    paddingVertical: 6,
   },
 });
