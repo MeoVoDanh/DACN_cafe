@@ -177,6 +177,30 @@ export default function MenuScreen({ navigation }) {
     const newStatus = isCurrentlySelling ? "Dừng bán" : "Đang bán";
     const actionText = isCurrentlySelling ? "dừng bán" : "tiếp tục bán";
 
+    if (Platform.OS === "web") {
+      const confirmToggle = window.confirm(`Bạn có chắc chắn muốn ${actionText} đồ uống "${drink.tenDoUong}" không?`);
+      if (confirmToggle) {
+        const payload = {
+          tenDoUong: drink.tenDoUong,
+          donGia: drink.donGia,
+          moTa: drink.moTa,
+          hinhAnh: drink.hinhAnh,
+          trangThai: newStatus,
+        };
+        dispatch(
+          updateDrink({
+            maDoUong: drink.maDoUong,
+            data: payload,
+          })
+        ).then((result) => {
+          if (updateDrink.fulfilled.match(result)) {
+            dispatch(fetchDrinks());
+          }
+        });
+      }
+      return;
+    }
+
     Alert.alert(
       "Xác nhận thay đổi",
       `Bạn có chắc chắn muốn ${actionText} đồ uống "${drink.tenDoUong}" không?`,
@@ -317,6 +341,7 @@ export default function MenuScreen({ navigation }) {
         data={drinks}
         keyExtractor={(item, index) => String(item.maDoUong ?? index)}
         renderItem={renderDrink}
+        style={styles.list}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <Text style={styles.emptyText}>Chưa có đồ uống nào</Text>
@@ -439,6 +464,9 @@ const styles = StyleSheet.create({
     height: Platform.OS === "web" ? "100vh" : "100%",
     maxHeight: Platform.OS === "web" ? "100vh" : "100%",
     overflow: "hidden",
+  },
+  list: {
+    flex: 1,
   },
   headerBox: {
     flexDirection: "row",

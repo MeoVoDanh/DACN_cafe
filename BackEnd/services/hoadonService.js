@@ -169,7 +169,7 @@ export const createHoaDonService = async (data, user) => {
   }
 };
 
-export const thanhToanHoaDonService = async (maHoaDon) => {
+export const thanhToanHoaDonService = async (maHoaDon, user) => {
   const connection = await db.getConnection();
 
   try {
@@ -204,14 +204,26 @@ export const thanhToanHoaDonService = async (maHoaDon) => {
       };
     }
 
-    await connection.query(
-      `
-      UPDATE HoaDon
-      SET trangthaithanhtoan = 'Đã thanh toán'
-      WHERE maHoaDon = ?
-      `,
-      [maHoaDon],
-    );
+    const MaNhanVien = user?.MaNhanVien;
+    if (MaNhanVien) {
+      await connection.query(
+        `
+        UPDATE HoaDon
+        SET trangthaithanhtoan = 'Đã thanh toán', MaNhanVien = ?
+        WHERE maHoaDon = ?
+        `,
+        [MaNhanVien, maHoaDon],
+      );
+    } else {
+      await connection.query(
+        `
+        UPDATE HoaDon
+        SET trangthaithanhtoan = 'Đã thanh toán'
+        WHERE maHoaDon = ?
+        `,
+        [maHoaDon],
+      );
+    }
 
     await connection.query(
       `
@@ -259,4 +271,166 @@ export const deleteHoaDonService = async (maHoaDon) => {
     statusCode: 200,
     data: { message: "Xóa hóa đơn thành công" },
   };
+};
+
+export const updateHoaDonService = async (maHoaDon, data, user) => {
+  const { items } = data;
+  const MaNhanVien = user?.MaNhanVien;
+
+  if (!MaNhanVien) {
+    return {
+      statusCode: 400,
+      data: { message: "Tài khoản chưa liên kết nhân viên" },
+    };
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return {
+      statusCode: 400,
+      data: { message: "Hóa đơn phải có ít nhất một món" },
+    };
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Kiểm tra hóa đơn tồn tại và chưa thanh toán
+    const [hoaDonRows] = await connection.query(
+      "SELECT trangthaithanhtoan FROM HoaDon WHERE maHoaDon = ?",
+      [maHoaDon]
+    );
+
+    if (hoaDonRows.length === 0) {
+      await connection.rollback();
+      return {
+        statusCode: 404,
+        data: { message: "Không tìm thấy hóa đơn" },
+      };
+    }
+
+    if (hoaDonRows[0].trangthaithanhtoan !== "Chưa thanh toán") {
+      await connection.rollback();
+      return {
+        statusCode: 400,
+        data: { message: "Chỉ được sửa hóa đơn chưa thanh toán" },
+      };
+    }
+
+    // 2. Tính toán tổng tiền mới và xác thực các đồ uống
+    let tongtien = 0;
+    const chiTietItems = [];
+
+    for (const item of items) {
+      const [drinkRows] = await connection.query(
+        "SELECT maDoUong, donGia FROM DoUong WHERE maDoUong = ?",
+        [item.maDoUong]
+      );
+
+      if (drinkRows.length === 0) {
+        await connection.rollback();
+        return {
+          statusCode: 404,
+          data: { message: `Không tìm thấy đồ uống mã ${item.maDoUong}` },
+        };
+      }
+
+      const soluong = Number(item.soluong || 1);
+      const dongia = Number(drinkRows[0].donGia);
+      const thanhtien = soluong * dongia;
+
+      tongtien += thanhtien;
+      chiTietItems.push({
+        maDoUong: item.maDoUong,
+        soluong,
+        dongia,
+      });
+    }
+
+    // 3. Xóa chi tiết hóa đơn cũ
+    await connection.query(
+      "DELETE FROM ChiTietHoaDon WHERE maHoaDon = ?",
+      [maHoaDon]
+    );
+
+    // 4. Thêm chi tiết hóa đơn mới
+    for (const item of chiTietItems) {
+      await connection.query(
+        "INSERT INTO ChiTietHoaDon (maHoaDon, maDoUong, soluong, dongia) VALUES (?, ?, ?, ?)",
+        [maHoaDon, item.maDoUong, item.soluong, item.dongia]
+      );
+    }
+
+    // 5. Cập nhật tổng tiền và nhân viên thao tác trong HoaDon
+    await connection.query(
+      "UPDATE HoaDon SET tongtien = ?, MaNhanVien = ? WHERE maHoaDon = ?",
+      [tongtien, MaNhanVien, maHoaDon]
+    );
+
+    await connection.commit();
+    return {
+      statusCode: 200,
+      data: { message: "Cập nhật hóa đơn thành công", tongtien },
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+export const huyHoaDonService = async (maHoaDon, user) => {
+  const MaNhanVien = user?.MaNhanVien;
+
+  if (!MaNhanVien) {
+    return {
+      statusCode: 400,
+      data: { message: "Tài khoản chưa liên kết nhân viên" },
+    };
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Kiểm tra hóa đơn tồn tại và chưa thanh toán
+    const [hoaDonRows] = await connection.query(
+      "SELECT trangthaithanhtoan FROM HoaDon WHERE maHoaDon = ?",
+      [maHoaDon]
+    );
+
+    if (hoaDonRows.length === 0) {
+      await connection.rollback();
+      return {
+        statusCode: 404,
+        data: { message: "Không tìm thấy hóa đơn" },
+      };
+    }
+
+    if (hoaDonRows[0].trangthaithanhtoan !== "Chưa thanh toán") {
+      await connection.rollback();
+      return {
+        statusCode: 400,
+        data: { message: "Chỉ được hủy hóa đơn chưa thanh toán" },
+      };
+    }
+
+    // 2. Cập nhật trạng thái thành Đã hủy
+    await connection.query(
+      "UPDATE HoaDon SET trangthaithanhtoan = 'Đã hủy', MaNhanVien = ? WHERE maHoaDon = ?",
+      [MaNhanVien, maHoaDon]
+    );
+
+    await connection.commit();
+    return {
+      statusCode: 200,
+      data: { message: "Hủy hóa đơn thành công" },
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };

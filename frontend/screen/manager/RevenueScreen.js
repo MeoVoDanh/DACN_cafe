@@ -16,14 +16,23 @@ import { fetchInvoices } from "../../redux/invoiceSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 import api from "../../redux/api"; // Import api trực tiếp để lấy chi tiết hóa đơn nhanh chóng
 
+const getLocalDateString = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  const y = date.getFullYear();
+  const m = (date.getMonth() + 1).toString().padStart(2, "0");
+  const d = date.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
 export default function RevenueScreen({ navigation }) {
   const dispatch = useDispatch();
   const { invoices, isLoading } = useSelector((state) => state.invoice);
 
-  // Khởi tạo bộ lọc mặc định là Tháng hiện tại (Theo metadata là Tháng 5 năm 2026)
-  const currentDate = new Date("2026-05-23");
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1); // 5
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear()); // 2026
+  // Khởi tạo bộ lọc mặc định là Tháng hiện tại
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   
   // Trạng thái hiển thị Lịch chọn ngày (Calendar Modal)
   const [showCalendar, setShowCalendar] = useState(false);
@@ -41,6 +50,23 @@ export default function RevenueScreen({ navigation }) {
 
   // Danh sách các tháng để hiển thị thanh chọn
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
+
+  // Ngày hôm nay động
+  const todayStr = useMemo(() => {
+    return getLocalDateString(new Date());
+  }, []);
+
+  const todayLabel = useMemo(() => {
+    const today = new Date();
+    return `Hôm nay (${today.getDate()}/${today.getMonth() + 1})`;
+  }, []);
+
+  const handleSelectToday = () => {
+    const today = new Date();
+    setSelectedMonth(today.getMonth() + 1);
+    setSelectedYear(today.getFullYear());
+    setActiveDateFilter(todayStr);
+  };
 
   // 1. Lọc hóa đơn theo tháng và năm được chọn
   const monthlyInvoices = useMemo(() => {
@@ -68,7 +94,7 @@ export default function RevenueScreen({ navigation }) {
     const dates = new Set();
     monthlyInvoices.forEach((item) => {
       const d = new Date(item.createdAt || item.ngaylap);
-      const dateStr = d.toISOString().split("T")[0]; // YYYY-MM-DD
+      const dateStr = getLocalDateString(d); // YYYY-MM-DD
       dates.add(dateStr);
     });
     return dates;
@@ -108,7 +134,7 @@ export default function RevenueScreen({ navigation }) {
     if (activeDateFilter) {
       result = result.filter((item) => {
         const d = new Date(item.createdAt || item.ngaylap);
-        const dateStr = d.toISOString().split("T")[0]; // YYYY-MM-DD
+        const dateStr = getLocalDateString(d); // YYYY-MM-DD
         return dateStr === activeDateFilter;
       });
     }
@@ -294,11 +320,11 @@ export default function RevenueScreen({ navigation }) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.quickFilterBtn, activeDateFilter === "2026-05-23" && styles.quickFilterBtnActive]}
-              onPress={() => setActiveDateFilter("2026-05-23")}
+              style={[styles.quickFilterBtn, activeDateFilter === todayStr && styles.quickFilterBtnActive]}
+              onPress={handleSelectToday}
             >
-              <Text style={[styles.quickFilterText, activeDateFilter === "2026-05-23" && styles.quickFilterTextActive]}>
-                Hôm nay (23/5)
+              <Text style={[styles.quickFilterText, activeDateFilter === todayStr && styles.quickFilterTextActive]}>
+                {todayLabel}
               </Text>
             </TouchableOpacity>
           </View>
@@ -544,7 +570,12 @@ const formatDate = (value) => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f8f1e9" },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f8f1e9",
+    height: Platform.OS === "web" ? "100vh" : "100%",
+    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",

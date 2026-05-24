@@ -78,6 +78,40 @@ export const payInvoice = createAsyncThunk(
   },
 );
 
+export const updateInvoice = createAsyncThunk(
+  "invoice/updateInvoice",
+  async ({ maHoaDon, invoiceData }, thunkAPI) => {
+    try {
+      const response = await api.put(`/hoadon/${maHoaDon}`, invoiceData);
+      return response.data;
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Cập nhật hóa đơn thất bại";
+
+      return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
+export const cancelInvoice = createAsyncThunk(
+  "invoice/cancelInvoice",
+  async (maHoaDon, thunkAPI) => {
+    try {
+      const response = await api.patch(`/hoadon/${maHoaDon}/huy`);
+      return response.data;
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        "Hủy hóa đơn thất bại";
+
+      return thunkAPI.rejectWithValue(message);
+    }
+  },
+);
+
 const invoiceSlice = createSlice({
   name: "invoice",
   initialState,
@@ -140,6 +174,32 @@ const invoiceSlice = createSlice({
         state.message = action.payload.message || "Thanh toán thành công";
       })
       .addCase(payInvoice.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+
+      .addCase(updateInvoice.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(updateInvoice.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.message = action.payload.message || "Cập nhật hóa đơn thành công";
+      })
+      .addCase(updateInvoice.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+
+      .addCase(cancelInvoice.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(cancelInvoice.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.message = action.payload.message || "Hủy hóa đơn thành công";
+      })
+      .addCase(cancelInvoice.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload;
       });
