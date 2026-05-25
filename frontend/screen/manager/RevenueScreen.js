@@ -514,6 +514,11 @@ export default function RevenueScreen({ navigation }) {
                   <View key={`${drink.maDoUong}-${idx}`} style={styles.detailItemRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.detailItemName}>{drink.tenDoUong}</Text>
+                      {drink.duong && drink.da && (
+                        <Text style={{ fontSize: 11, color: "#8d6e63", marginTop: 2 }}>
+                          Ghi chú: {drink.duong} đường, {drink.da} đá
+                        </Text>
+                      )}
                       <Text style={styles.detailItemSub}>
                         Số lượng: <Text style={{ fontWeight: "bold", color: "#4b3621" }}>{drink.soluong}</Text> x {Number(drink.dongia).toLocaleString("vi-VN")}đ
                       </Text>

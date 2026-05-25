@@ -54,7 +54,9 @@ export const getHoaDonByIdService = async (maHoaDon) => {
       du.tenDoUong,
       cthd.soluong,
       cthd.dongia,
-      cthd.thanhtien
+      cthd.thanhtien,
+      cthd.duong,
+      cthd.da
     FROM ChiTietHoaDon cthd
     JOIN DoUong du ON cthd.maDoUong = du.maDoUong
     WHERE cthd.maHoaDon = ?
@@ -127,6 +129,8 @@ export const createHoaDonService = async (data, user) => {
         soluong,
         dongia,
         thanhtien,
+        duong: item.duong,
+        da: item.da,
       });
     }
 
@@ -144,10 +148,10 @@ export const createHoaDonService = async (data, user) => {
       await connection.query(
         `
         INSERT INTO ChiTietHoaDon 
-        (maHoaDon, maDoUong, soluong, dongia)
-        VALUES (?, ?, ?, ?)
+        (maHoaDon, maDoUong, soluong, dongia, duong, da)
+        VALUES (?, ?, ?, ?, ?, ?)
         `,
-        [maHoaDon, item.maDoUong, item.soluong, item.dongia],
+        [maHoaDon, item.maDoUong, item.soluong, item.dongia, item.duong || "100%", item.da || "100%"],
       );
     }
 
@@ -344,6 +348,8 @@ export const updateHoaDonService = async (maHoaDon, data, user) => {
         maDoUong: item.maDoUong,
         soluong,
         dongia,
+        duong: item.duong,
+        da: item.da,
       });
     }
 
@@ -356,8 +362,8 @@ export const updateHoaDonService = async (maHoaDon, data, user) => {
     // 4. Thêm chi tiết hóa đơn mới
     for (const item of chiTietItems) {
       await connection.query(
-        "INSERT INTO ChiTietHoaDon (maHoaDon, maDoUong, soluong, dongia) VALUES (?, ?, ?, ?)",
-        [maHoaDon, item.maDoUong, item.soluong, item.dongia]
+        "INSERT INTO ChiTietHoaDon (maHoaDon, maDoUong, soluong, dongia, duong, da) VALUES (?, ?, ?, ?, ?, ?)",
+        [maHoaDon, item.maDoUong, item.soluong, item.dongia, item.duong || "100%", item.da || "100%"]
       );
     }
 
