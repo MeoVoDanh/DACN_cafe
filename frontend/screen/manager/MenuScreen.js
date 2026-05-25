@@ -42,6 +42,7 @@ export default function MenuScreen({ navigation }) {
   const [moTa, setMoTa] = useState("");
   const [hinhAnh, setHinhAnh] = useState("");
   const [trangThai, setTrangThai] = useState("Đang bán");
+  const [danhMuc, setDanhMuc] = useState("Khác");
 
   useEffect(() => {
     dispatch(fetchDrinks());
@@ -62,6 +63,7 @@ export default function MenuScreen({ navigation }) {
     setMoTa("");
     setHinhAnh("");
     setTrangThai("Đang bán");
+    setDanhMuc("Khác");
     setPreviewImage(null);
   };
   const openCreateModal = () => {
@@ -76,6 +78,7 @@ export default function MenuScreen({ navigation }) {
     setMoTa(drink.moTa || "");
     setHinhAnh(drink.hinhAnh || "");
     setTrangThai(drink.trangThai || "Đang bán");
+    setDanhMuc(drink.danhMuc || "Khác");
 
     if (drink.hinhAnh) {
       setPreviewImage(`${BASE_URL}/img/${drink.hinhAnh}`);
@@ -147,6 +150,7 @@ export default function MenuScreen({ navigation }) {
       moTa: moTa.trim(),
       hinhAnh: hinhAnh.trim(),
       trangThai: trangThai,
+      danhMuc: danhMuc.trim() || "Khác",
     };
 
     let result;
@@ -186,6 +190,7 @@ export default function MenuScreen({ navigation }) {
           moTa: drink.moTa,
           hinhAnh: drink.hinhAnh,
           trangThai: newStatus,
+          danhMuc: drink.danhMuc || "Khác",
         };
         dispatch(
           updateDrink({
@@ -215,6 +220,7 @@ export default function MenuScreen({ navigation }) {
               moTa: drink.moTa,
               hinhAnh: drink.hinhAnh,
               trangThai: newStatus,
+              danhMuc: drink.danhMuc || "Khác",
             };
             const result = await dispatch(
               updateDrink({
@@ -270,6 +276,11 @@ export default function MenuScreen({ navigation }) {
                 ]}
               >
                 {item.trangThai || "Đang bán"}
+              </Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: "#efebe9", borderColor: "#d7ccc8" }]}>
+              <Text style={[styles.statusBadgeText, { color: "#4b3621" }]}>
+                {item.danhMuc || "Khác"}
               </Text>
             </View>
           </View>
@@ -367,6 +378,12 @@ export default function MenuScreen({ navigation }) {
               keyboardType="numeric"
             />
             <Input label="Mô tả" value={moTa} onChangeText={setMoTa} />
+            <Input
+              label="Danh mục"
+              value={danhMuc}
+              onChangeText={setDanhMuc}
+              placeholder="Ví dụ: Cà phê, Trà sữa, Matcha..."
+            />
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Trạng thái kinh doanh</Text>
