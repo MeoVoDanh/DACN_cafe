@@ -162,8 +162,10 @@ CREATE TABLE ChiTietHoaDon (
     soluong INT NOT NULL DEFAULT 1 COMMENT 'Số lượng',
     dongia DOUBLE NOT NULL COMMENT 'Đơn giá tại thời điểm bán',
     thanhtien DOUBLE GENERATED ALWAYS AS (soluong * dongia) STORED COMMENT 'Thành tiền',
+    duong VARCHAR(10) NOT NULL DEFAULT '100%' COMMENT 'Phần trăm đường',
+    da VARCHAR(10) NOT NULL DEFAULT '100%' COMMENT 'Phần trăm đá',
 
-    PRIMARY KEY (maHoaDon, maDoUong),
+    PRIMARY KEY (maHoaDon, maDoUong, duong, da),
 
     CONSTRAINT fk_cthd_hoadon
         FOREIGN KEY (maHoaDon)
