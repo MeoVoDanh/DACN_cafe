@@ -8,7 +8,8 @@ export const getAllDoUongService = async () => {
       donGia,
       moTa,
       hinhAnh,
-      trangThai
+      trangThai,
+      danhMuc
     FROM DoUong
     ORDER BY maDoUong DESC
   `);
@@ -28,7 +29,8 @@ export const getDoUongByIdService = async (maDoUong) => {
       donGia,
       moTa,
       hinhAnh,
-      trangThai
+      trangThai,
+      danhMuc
     FROM DoUong
     WHERE maDoUong = ?
     `,
@@ -51,14 +53,14 @@ export const getDoUongByIdService = async (maDoUong) => {
 };
 
 export const createDoUongService = async (data) => {
-  const { tenDoUong, donGia, moTa, hinhAnh, trangThai } = data;
+  const { tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc } = data;
 
   const [result] = await db.query(
     `
-    INSERT INTO DoUong (tenDoUong, donGia, moTa, hinhAnh, trangThai)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO DoUong (tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc)
+    VALUES (?, ?, ?, ?, ?, ?)
     `,
-    [tenDoUong, donGia, moTa || null, hinhAnh || null, trangThai || "Đang bán"],
+    [tenDoUong, donGia, moTa || null, hinhAnh || null, trangThai || "Đang bán", danhMuc || "Khác"],
   );
 
   return {
@@ -71,15 +73,15 @@ export const createDoUongService = async (data) => {
 };
 
 export const updateDoUongService = async (maDoUong, data) => {
-  const { tenDoUong, donGia, moTa, hinhAnh, trangThai } = data;
+  const { tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc } = data;
 
   const [result] = await db.query(
     `
     UPDATE DoUong
-    SET tenDoUong = ?, donGia = ?, moTa = ?, hinhAnh = ?, trangThai = ?
+    SET tenDoUong = ?, donGia = ?, moTa = ?, hinhAnh = ?, trangThai = ?, danhMuc = ?
     WHERE maDoUong = ?
     `,
-    [tenDoUong, donGia, moTa || null, hinhAnh || null, trangThai || "Đang bán", maDoUong],
+    [tenDoUong, donGia, moTa || null, hinhAnh || null, trangThai || "Đang bán", danhMuc || "Khác", maDoUong],
   );
 
   if (result.affectedRows === 0) {

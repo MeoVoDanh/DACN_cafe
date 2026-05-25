@@ -12,6 +12,7 @@ import {
   ScrollView,
   Platform,
   TextInput,
+  Image,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -26,16 +27,36 @@ import {
 import { FontAwesome5 } from "@expo/vector-icons";
 import api from "../../redux/api";
 
+
+
 export default function InvoiceScreen({ navigation }) {
   const dispatch = useDispatch();
+  const BASE_URL = api.defaults.baseURL.replace("/api", "");
 
   const { invoices, drinks, isLoading, error, message } = useSelector(
     (state) => state.invoice,
   );
 
+  // Dynamically compute categories from drinks database records
+  const uniqueCategories = Array.from(new Set(
+    drinks
+      .filter((d) => d.trangThai !== "Dừng bán" && d.danhMuc)
+      .map((d) => d.danhMuc)
+  ));
+  
+  const CATEGORIES = [
+    { id: "all", name: "Tất cả" },
+    ...uniqueCategories.map((cat) => ({ id: cat, name: cat }))
+  ];
+
+  const getCategoryForDrink = (drink) => {
+    return drink.danhMuc || "Khác";
+  };
+
   const [modalVisible, setModalVisible] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editInvoiceId, setEditInvoiceId] = useState(null);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
@@ -410,6 +431,7 @@ export default function InvoiceScreen({ navigation }) {
     setEditInvoiceId(invoice.maHoaDon);
     setSearchQuery("");
     setCartItems([]);
+    setSelectedCategory("all");
     setEditModalVisible(true);
     
     try {
@@ -544,6 +566,95 @@ export default function InvoiceScreen({ navigation }) {
     );
   };
 
+  const renderDrinkGridItem = (drink) => {
+    const imageUrl = drink.hinhAnh ? `${BASE_URL}/img/${drink.hinhAnh}` : null;
+    return (
+      <TouchableOpacity
+        key={drink.maDoUong}
+        style={styles.drinkGridCard}
+        onPress={() => handlePressAddDrink(drink)}
+      >
+        <View style={styles.drinkGridImageWrapper}>
+          {imageUrl ? (
+            <Image
+              source={{ uri: imageUrl }}
+              style={styles.drinkGridImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.drinkGridNoImage}>
+              <FontAwesome5 name="coffee" size={24} color="#8d6e63" />
+            </View>
+          )}
+          <View style={styles.priceBadge}>
+            <Text style={styles.priceBadgeText}>
+              {Math.round(drink.donGia / 1000)}k
+            </Text>
+          </View>
+        </View>
+        <View style={styles.drinkGridInfo}>
+          <Text style={styles.drinkGridName} numberOfLines={2}>
+            {drink.tenDoUong}
+          </Text>
+        </View>
+        <View style={styles.drinkGridAddIcon}>
+          <FontAwesome5 name="plus" size={10} color="#fff" />
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderDrinksSelection = () => {
+    const activeDrinks = drinks.filter(
+      (d) =>
+        d.trangThai !== "Dừng bán" &&
+        d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (activeDrinks.length === 0) {
+      return <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>;
+    }
+
+    // If searching, show all matches in a grid without headers
+    if (searchQuery.trim().length > 0) {
+      return (
+        <View style={styles.gridContainer}>
+          {activeDrinks.map((drink) => renderDrinkGridItem(drink))}
+        </View>
+      );
+    }
+
+    const renderCategorySection = (catId, catName) => {
+      const catDrinks = activeDrinks.filter(
+        (d) => getCategoryForDrink(d) === catId
+      );
+
+      if (catDrinks.length === 0) return null;
+
+      return (
+        <View key={catId} style={styles.categorySection}>
+          <Text style={styles.categoryHeader}>{catName.toUpperCase()}</Text>
+          <View style={styles.gridContainer}>
+            {catDrinks.map((drink) => renderDrinkGridItem(drink))}
+          </View>
+        </View>
+      );
+    };
+
+    if (selectedCategory === "all") {
+      return (
+        <View>
+          {CATEGORIES.filter((c) => c.id !== "all").map((cat) =>
+            renderCategorySection(cat.id, cat.name)
+          )}
+        </View>
+      );
+    } else {
+      const matchedCat = CATEGORIES.find((c) => c.id === selectedCategory);
+      return renderCategorySection(selectedCategory, matchedCat ? matchedCat.name : "");
+    }
+  };
+
   if (isLoading && invoices.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -571,6 +682,7 @@ export default function InvoiceScreen({ navigation }) {
           onPress={() => {
             setSearchQuery("");
             setCartItems([]);
+            setSelectedCategory("all");
             setModalVisible(true);
           }}
         >
@@ -620,37 +732,35 @@ export default function InvoiceScreen({ navigation }) {
 
             <Text style={styles.sectionTitle}>Chọn đồ uống</Text>
 
-            {drinks.filter(
-              (d) =>
-                d.trangThai !== "Dừng bán" &&
-                d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
-            ).length === 0 ? (
-              <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>
-            ) : (
-              drinks
-                .filter(
-                  (d) =>
-                    d.trangThai !== "Dừng bán" &&
-                    d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
-                )
-                .map((drink) => (
-                  <View key={drink.maDoUong} style={styles.drinkRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.drinkName}>{drink.tenDoUong}</Text>
-                      <Text style={styles.drinkPrice}>
-                        {Number(drink.donGia).toLocaleString("vi-VN")}đ
-                      </Text>
-                    </View>
+            {/* Category Tab Bar */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryTabBar}
+              contentContainerStyle={{ paddingRight: 16 }}
+            >
+              {CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[
+                    styles.categoryTab,
+                    selectedCategory === cat.id && styles.categoryTabActive,
+                  ]}
+                  onPress={() => setSelectedCategory(cat.id)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryTabText,
+                      selectedCategory === cat.id && styles.categoryTabTextActive,
+                    ]}
+                  >
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
-                    <TouchableOpacity
-                      style={styles.smallAddBtn}
-                      onPress={() => handlePressAddDrink(drink)}
-                    >
-                      <FontAwesome5 name="plus" size={12} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ))
-            )}
+            {renderDrinksSelection()}
 
             <Text style={styles.sectionTitle}>Món đã chọn</Text>
 
@@ -743,37 +853,35 @@ export default function InvoiceScreen({ navigation }) {
 
             <Text style={styles.sectionTitle}>Chọn đồ uống</Text>
 
-            {drinks.filter(
-              (d) =>
-                d.trangThai !== "Dừng bán" &&
-                d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
-            ).length === 0 ? (
-              <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>
-            ) : (
-              drinks
-                .filter(
-                  (d) =>
-                    d.trangThai !== "Dừng bán" &&
-                    d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
-                )
-                .map((drink) => (
-                  <View key={drink.maDoUong} style={styles.drinkRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.drinkName}>{drink.tenDoUong}</Text>
-                      <Text style={styles.drinkPrice}>
-                        {Number(drink.donGia).toLocaleString("vi-VN")}đ
-                      </Text>
-                    </View>
+            {/* Category Tab Bar */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryTabBar}
+              contentContainerStyle={{ paddingRight: 16 }}
+            >
+              {CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[
+                    styles.categoryTab,
+                    selectedCategory === cat.id && styles.categoryTabActive,
+                  ]}
+                  onPress={() => setSelectedCategory(cat.id)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryTabText,
+                      selectedCategory === cat.id && styles.categoryTabTextActive,
+                    ]}
+                  >
+                    {cat.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
-                    <TouchableOpacity
-                      style={styles.smallAddBtn}
-                      onPress={() => handlePressAddDrink(drink)}
-                    >
-                      <FontAwesome5 name="plus" size={12} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ))
-            )}
+            {renderDrinksSelection()}
 
             <Text style={styles.sectionTitle}>Món đã chọn</Text>
 
@@ -1666,5 +1774,131 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "web" ? "monospace" : "Courier New",
     fontSize: 10,
     color: "#d32f2f",
+  },
+  categoryTabBar: {
+    flexDirection: "row",
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  categoryTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+  },
+  categoryTabActive: {
+    backgroundColor: "#4b3621",
+    borderColor: "#4b3621",
+  },
+  categoryTabText: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#8d6e63",
+  },
+  categoryTabTextActive: {
+    color: "#fff",
+  },
+  categorySection: {
+    marginBottom: 20,
+  },
+  categoryHeader: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#8d6e63",
+    marginBottom: 10,
+    marginTop: 6,
+    letterSpacing: 1,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  drinkGridCard: {
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    width: Platform.OS === "web" ? "23.5%" : "30%",
+    minWidth: 100,
+    maxWidth: 160,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    position: "relative",
+    overflow: "hidden",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    padding: 8,
+    alignItems: "center",
+  },
+  drinkGridImageWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    overflow: "hidden",
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+    position: "relative",
+  },
+  drinkGridImage: {
+    width: "100%",
+    height: "100%",
+  },
+  drinkGridNoImage: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  priceBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "#2e7d32",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#fff",
+  },
+  priceBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  drinkGridInfo: {
+    width: "100%",
+    alignItems: "center",
+  },
+  drinkGridName: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#4b3621",
+    textAlign: "center",
+    lineHeight: 16,
+    height: 32,
+  },
+  drinkGridAddIcon: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "#4b3621",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
