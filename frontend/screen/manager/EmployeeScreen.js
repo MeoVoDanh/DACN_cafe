@@ -37,6 +37,7 @@ export default function EmployeeScreen({ navigation, route }) {
   const [MatKhau, setMatKhau] = useState("");
   const [vaiTro, setVaiTro] = useState("Pha chế");
   const [TrangThai, setTrangThai] = useState("Đang làm việc");
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
 
   useEffect(() => {
     if (isEditMode && employee) {
@@ -71,7 +72,7 @@ export default function EmployeeScreen({ navigation, route }) {
       Email: Email.trim(),
       SDT: SDT.trim(),
       SoCCCD: SoCCCD.trim(),
-      TrangThai: "Đang làm việc",
+      TrangThai,
       vaiTro,
     };
 
@@ -111,6 +112,8 @@ export default function EmployeeScreen({ navigation, route }) {
     }
   };
 
+
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -127,115 +130,195 @@ export default function EmployeeScreen({ navigation, route }) {
           </Text>
         </View>
 
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Họ tên</Text>
-        <TextInput
-          style={styles.input}
-          value={HoTen}
-          onChangeText={setHoTen}
-          placeholder="Nhập họ tên nhân viên"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          value={Email}
-          onChangeText={setEmail}
-          placeholder="Nhập email"
-          autoCapitalize="none"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Số điện thoại</Text>
-        <TextInput
-          style={styles.input}
-          value={SDT}
-          onChangeText={setSDT}
-          placeholder="Nhập số điện thoại"
-          keyboardType="phone-pad"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Số CCCD</Text>
-        <TextInput
-          style={styles.input}
-          value={SoCCCD}
-          onChangeText={setSoCCCD}
-          placeholder="Nhập số CCCD"
-          keyboardType="numeric"
-        />
-      </View>
-
-      {!isEditMode && (
-        <>
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Tên đăng nhập</Text>
-            <TextInput
-              style={styles.input}
-              value={tenDangNhap}
-              onChangeText={setTenDangNhap}
-              placeholder="Nhập tên đăng nhập"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Mật khẩu</Text>
-            <TextInput
-              style={styles.input}
-              value={MatKhau}
-              onChangeText={setMatKhau}
-              placeholder="Nhập mật khẩu"
-              secureTextEntry
-            />
-          </View>
-        </>
-      )}
-
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Vai trò</Text>
-        <View style={styles.roleGrid}>
-          {["Pha chế", "Thu ngân", "Phục vụ", "Tạp vụ"].map((role) => (
-            <TouchableOpacity
-              key={role}
-              style={[
-                styles.roleGridBtn,
-                vaiTro === role && styles.roleGridBtnActive,
-              ]}
-              onPress={() => setVaiTro(role)}
-            >
-              <Text
-                style={[
-                  styles.roleGridBtnText,
-                  vaiTro === role && styles.roleGridBtnTextActive,
-                ]}
-              >
-                {role}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Họ tên</Text>
+          <TextInput
+            style={styles.input}
+            value={HoTen}
+            onChangeText={setHoTen}
+            placeholder="Nhập họ tên nhân viên"
+          />
         </View>
-      </View>
 
-      <TouchableOpacity
-        style={styles.submitBtn}
-        onPress={handleSubmit}
-        disabled={isLoading}
-      >
-        {isLoading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitText}>
-            {isEditMode ? "Lưu thay đổi" : "Thêm nhân viên"}
-          </Text>
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput
+            style={styles.input}
+            value={Email}
+            onChangeText={setEmail}
+            placeholder="Nhập email"
+            autoCapitalize="none"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Số điện thoại</Text>
+          <TextInput
+            style={styles.input}
+            value={SDT}
+            onChangeText={setSDT}
+            placeholder="Nhập số điện thoại"
+            keyboardType="phone-pad"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Số CCCD</Text>
+          <TextInput
+            style={styles.input}
+            value={SoCCCD}
+            onChangeText={setSoCCCD}
+            placeholder="Nhập số CCCD"
+            keyboardType="numeric"
+          />
+        </View>
+
+        {!isEditMode && (
+          <>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Tên đăng nhập</Text>
+              <TextInput
+                style={styles.input}
+                value={tenDangNhap}
+                onChangeText={setTenDangNhap}
+                placeholder="Nhập tên đăng nhập"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Mật khẩu</Text>
+              <TextInput
+                style={styles.input}
+                value={MatKhau}
+                onChangeText={setMatKhau}
+                placeholder="Nhập mật khẩu"
+                secureTextEntry
+              />
+            </View>
+          </>
         )}
-      </TouchableOpacity>
 
-      {/* Removed Quay lại button */}
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Vai trò</Text>
+          <View style={styles.roleGrid}>
+            {(() => {
+              const roles = ["Pha chế", "Thu ngân", "Phục vụ", "Tạp vụ"];
+              if (vaiTro === "Admin") {
+                roles.unshift("Admin");
+              } else if (vaiTro === "NhanVien") {
+                roles.unshift("NhanVien");
+              }
+              return roles.map((role) => {
+                const isDisabled = employee?.vaiTro === "Admin";
+                return (
+                  <TouchableOpacity
+                    key={role}
+                    style={[
+                      styles.roleGridBtn,
+                      vaiTro === role && styles.roleGridBtnActive,
+                      isDisabled && { opacity: 0.6 }
+                    ]}
+                    onPress={() => setVaiTro(role)}
+                    disabled={isDisabled}
+                  >
+                    <Text
+                      style={[
+                        styles.roleGridBtnText,
+                        vaiTro === role && styles.roleGridBtnTextActive,
+                      ]}
+                    >
+                      {role === "NhanVien" ? "Nhân viên" : role}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              });
+            })()}
+          </View>
+          {employee?.vaiTro === "Admin" && (
+            <Text style={{ fontSize: 11, color: "#d32f2f", marginTop: 4 }}>
+              * Chỉ Ban IT mới có quyền cấp hoặc thu hồi quyền Admin.
+            </Text>
+          )}
+        </View>
+
+        {isEditMode && (
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Trạng thái</Text>
+            
+            <TouchableOpacity
+              style={styles.dropdownHeader}
+              onPress={() => setShowStatusDropdown(!showStatusDropdown)}
+            >
+              <Text style={styles.dropdownHeaderText}>{TrangThai}</Text>
+              <FontAwesome5
+                name={showStatusDropdown ? "chevron-up" : "chevron-down"}
+                size={12}
+                color="#4b3621"
+              />
+            </TouchableOpacity>
+
+            {showStatusDropdown && (
+              <View style={styles.dropdownList}>
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    TrangThai === "Đang làm việc" && styles.dropdownItemActive,
+                  ]}
+                  onPress={() => {
+                    setTrangThai("Đang làm việc");
+                    setShowStatusDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      TrangThai === "Đang làm việc" && styles.dropdownItemTextActive,
+                    ]}
+                  >
+                    Đang làm việc
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    TrangThai === "Đã nghỉ việc" && styles.dropdownItemActive,
+                  ]}
+                  onPress={() => {
+                    setTrangThai("Đã nghỉ việc");
+                    setShowStatusDropdown(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      TrangThai === "Đã nghỉ việc" && styles.dropdownItemTextActive,
+                    ]}
+                  >
+                    Đã nghỉ việc
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.submitBtn}
+          onPress={handleSubmit}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.submitText}>
+              {isEditMode ? "Lưu thay đổi" : "Thêm nhân viên"}
+            </Text>
+          )}
+        </TouchableOpacity>
+
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -378,6 +461,63 @@ const styles = StyleSheet.create({
 
   cancelText: {
     color: "#4b3621",
+    fontWeight: "bold",
+  },
+
+  dropdownHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    borderRadius: 12,
+    padding: 12,
+  },
+  dropdownHeaderText: {
+    color: "#4b3621",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  dropdownList: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    borderRadius: 12,
+    marginTop: 4,
+    overflow: "hidden",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  dropdownItem: {
+    padding: 12,
+    backgroundColor: "#fff",
+  },
+  dropdownItemActive: {
+    backgroundColor: "#f5eee6",
+  },
+  dropdownItemText: {
+    color: "#6d4c41",
+    fontSize: 13,
+  },
+  dropdownItemTextActive: {
+    color: "#4b3621",
+    fontWeight: "bold",
+  },
+
+  deleteBtn: {
+    backgroundColor: "#D32F2F",
+    padding: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 30,
+  },
+  deleteText: {
+    color: "#fff",
     fontWeight: "bold",
   },
 });
