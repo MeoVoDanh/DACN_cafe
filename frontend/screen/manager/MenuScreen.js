@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ScrollView,
   Image,
   Platform,
+  StatusBar,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -20,19 +21,65 @@ import {
   deleteDrink,
   fetchDrinks,
   updateDrink,
+  clearMenuMessage,
 } from "../../redux/menuSlice";
 import * as ImagePicker from "expo-image-picker";
 import { FontAwesome5 } from "@expo/vector-icons";
 import api from "../../redux/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function MenuScreen({ navigation }) {
   const BASE_URL = api.defaults.baseURL.replace("/api", "");
   const [previewImage, setPreviewImage] = useState(null);
   const dispatch = useDispatch();
 
+  const [selectedCategory, setSelectedCategory] = useState("Tất cả");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [createdCategories, setCreatedCategories] = useState([]);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [renamingCategory, setRenamingCategory] = useState(null);
+
   const { drinks, isLoading, error, message } = useSelector(
     (state) => state.menu,
   );
+
+  useEffect(() => {
+    const loadCustomCategories = async () => {
+      try {
+        const stored = await AsyncStorage.getItem("custom_categories");
+        if (stored) {
+          setCreatedCategories(JSON.parse(stored));
+        }
+      } catch (err) {
+        console.log("Failed to load custom categories:", err);
+      }
+    };
+    loadCustomCategories();
+  }, []);
+
+  const CATEGORIES = useMemo(() => {
+    const dbCategories = Array.from(
+      new Set(drinks.filter((d) => d.danhMuc).map((d) => d.danhMuc))
+    );
+    const combined = Array.from(new Set([...dbCategories, ...createdCategories]));
+    return ["Tất cả", ...combined];
+  }, [drinks, createdCategories]);
+
+  const quickCategories = useMemo(() => {
+    const dbCategories = Array.from(
+      new Set(drinks.filter((d) => d.danhMuc).map((d) => d.danhMuc))
+    );
+    const standards = ["Cà phê", "Trà", "Trà sữa", "Sinh tố & Nước ép", "Matcha", "Khác"];
+    return Array.from(new Set([...standards, ...dbCategories, ...createdCategories]));
+  }, [drinks, createdCategories]);
+
+  const searchedDrinks = useMemo(() => {
+    if (!searchQuery.trim()) return drinks;
+    return drinks.filter((d) =>
+      d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [drinks, searchQuery]);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingDrink, setEditingDrink] = useState(null);
@@ -65,7 +112,181 @@ export default function MenuScreen({ navigation }) {
     setTrangThai("Đang bán");
     setDanhMuc("Khác");
     setPreviewImage(null);
+    dispatch(clearMenuMessage());
   };
+
+  const submitNewCategory = async () => {
+    if (!newCategoryName.trim()) {
+      Alert.alert("Thông báo", "Tên danh mục không được để trống!");
+      return;
+    }
+    const trimmed = newCategoryName.trim();
+    
+    if (renamingCategory) {
+      await performRenameCategory(renamingCategory, trimmed);
+      setRenamingCategory(null);
+      setNewCategoryName("");
+      setCategoryModalVisible(false);
+      return;
+    }
+
+    const exists = CATEGORIES.some(c => c.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      Alert.alert("Thông báo", "Danh mục này đã tồn tại!");
+      return;
+    }
+
+    const updated = [...createdCategories, trimmed];
+    setCreatedCategories(updated);
+    try {
+      await AsyncStorage.setItem("custom_categories", JSON.stringify(updated));
+    } catch (err) {
+      console.log(err);
+    }
+    
+    setNewCategoryName("");
+    setCategoryModalVisible(false);
+    
+    if (Platform.OS === "web") {
+      window.alert(`Đã thêm danh mục "${trimmed}" thành công!`);
+    } else {
+      Alert.alert("Thành công", `Đã thêm danh mục "${trimmed}" thành công!`);
+    }
+  };
+
+  const handleEditCategoryName = async (oldName) => {
+    let newName = "";
+    if (Platform.OS === "web") {
+      const res = window.prompt(`Sửa tên danh mục "${oldName}" thành:`, oldName);
+      if (res && res.trim() && res.trim() !== oldName) {
+        newName = res.trim();
+      } else {
+        return;
+      }
+    } else {
+      setRenamingCategory(oldName);
+      setNewCategoryName(oldName);
+      setCategoryModalVisible(true);
+      return;
+    }
+
+    if (newName) {
+      await performRenameCategory(oldName, newName);
+    }
+  };
+
+  const performRenameCategory = async (oldName, newName) => {
+    const exists = CATEGORIES.some(c => c.toLowerCase() === newName.toLowerCase() && c !== oldName);
+    if (exists) {
+      if (Platform.OS === "web") {
+        window.alert("Tên danh mục này đã tồn tại!");
+      } else {
+        Alert.alert("Lỗi", "Tên danh mục này đã tồn tại!");
+      }
+      return;
+    }
+
+    const updatedCreated = createdCategories.map(c => c === oldName ? newName : c);
+    setCreatedCategories(updatedCreated);
+    await AsyncStorage.setItem("custom_categories", JSON.stringify(updatedCreated));
+
+    const drinksToUpdate = drinks.filter(d => d.danhMuc === oldName);
+    if (drinksToUpdate.length > 0) {
+      try {
+        await Promise.all(
+          drinksToUpdate.map(drink =>
+            dispatch(
+              updateDrink({
+                maDoUong: drink.maDoUong,
+                data: {
+                  tenDoUong: drink.tenDoUong,
+                  donGia: drink.donGia,
+                  moTa: drink.moTa,
+                  hinhAnh: drink.hinhAnh,
+                  trangThai: drink.trangThai,
+                  danhMuc: newName,
+                },
+              })
+            )
+          )
+        );
+        dispatch(fetchDrinks());
+      } catch (err) {
+        console.log("Failed to update drinks category in database:", err);
+      }
+    }
+
+    if (Platform.OS === "web") {
+      window.alert(`Đã đổi tên danh mục thành "${newName}" thành công!`);
+    } else {
+      Alert.alert("Thành công", `Đã đổi tên danh mục thành "${newName}" thành công!`);
+    }
+  };
+
+  const handleDeleteCategory = async (catName) => {
+    const isWeb = Platform.OS === "web";
+    const confirmDelete = () => {
+      return new Promise((resolve) => {
+        if (isWeb) {
+          const res = window.confirm(`Bạn có chắc chắn muốn xóa danh mục "${catName}" không?\n(Lưu ý: Các món thuộc danh mục này sẽ được tự động chuyển về danh mục "Khác")`);
+          resolve(res);
+        } else {
+          Alert.alert(
+            "Xác nhận xóa",
+            `Bạn có chắc chắn muốn xóa danh mục "${catName}" không?\n(Các món thuộc danh mục này sẽ chuyển về "Khác")`,
+            [
+              { text: "Hủy", style: "cancel", onPress: () => resolve(false) },
+              { text: "Xóa", style: "destructive", onPress: () => resolve(true) },
+            ]
+          );
+        }
+      });
+    };
+
+    const accepted = await confirmDelete();
+    if (!accepted) return;
+
+    const updatedCreated = createdCategories.filter(c => c !== catName);
+    setCreatedCategories(updatedCreated);
+    await AsyncStorage.setItem("custom_categories", JSON.stringify(updatedCreated));
+
+    const drinksToUpdate = drinks.filter(d => d.danhMuc === catName);
+    if (drinksToUpdate.length > 0) {
+      try {
+        await Promise.all(
+          drinksToUpdate.map(drink =>
+            dispatch(
+              updateDrink({
+                maDoUong: drink.maDoUong,
+                data: {
+                  tenDoUong: drink.tenDoUong,
+                  donGia: drink.donGia,
+                  moTa: drink.moTa,
+                  hinhAnh: drink.hinhAnh,
+                  trangThai: drink.trangThai,
+                  danhMuc: "Khác",
+                },
+              })
+            )
+          )
+        );
+        dispatch(fetchDrinks());
+      } catch (err) {
+        console.log("Failed to re-assign drinks category to Khác:", err);
+      }
+    }
+
+    if (selectedCategory === catName) {
+      setSelectedCategory("Tất cả");
+    }
+
+    if (isWeb) {
+      window.alert(`Đã xóa danh mục "${catName}" thành công!`);
+    } else {
+      Alert.alert("Thành công", `Đã xóa danh mục "${catName}" thành công!`);
+    }
+  };
+
   const openCreateModal = () => {
     resetForm();
     setModalVisible(true);
@@ -139,18 +360,26 @@ export default function MenuScreen({ navigation }) {
   };
 
   const handleSubmit = async () => {
-    if (!tenDoUong.trim() || !donGia.trim()) {
+    const trimmedTen = (tenDoUong || "").trim();
+    const trimmedGia = String(donGia || "").trim();
+    if (!trimmedTen || !trimmedGia) {
       Alert.alert("Thông báo", "Tên đồ uống và đơn giá không được để trống");
       return;
     }
 
+    const parsedPrice = Number(trimmedGia);
+    if (isNaN(parsedPrice) || parsedPrice < 0) {
+      Alert.alert("Thông báo", "Đơn giá phải là số dương hợp lệ");
+      return;
+    }
+
     const payload = {
-      tenDoUong: tenDoUong.trim(),
-      donGia: Number(donGia),
-      moTa: moTa.trim(),
-      hinhAnh: hinhAnh.trim(),
+      tenDoUong: trimmedTen,
+      donGia: parsedPrice,
+      moTa: (moTa || "").trim(),
+      hinhAnh: (hinhAnh || "").trim(),
       trangThai: trangThai,
-      danhMuc: danhMuc.trim() || "Khác",
+      danhMuc: (danhMuc || "").trim() || "Khác",
     };
 
     let result;
@@ -237,87 +466,142 @@ export default function MenuScreen({ navigation }) {
     );
   };
 
-  const renderDrink = ({ item }) => {
-    const imageUrl = item.hinhAnh ? `${BASE_URL}/img/${item.hinhAnh}` : null;
-
+  const renderDrinkGridItem = (drink) => {
+    const imageUrl = drink.hinhAnh ? `${BASE_URL}/img/${drink.hinhAnh}` : null;
+    const isStopped = drink.trangThai === "Dừng bán";
     return (
-      <View style={styles.card}>
-        <View style={styles.imageBox}>
+      <View
+        key={drink.maDoUong}
+        style={[
+          styles.drinkGridCard,
+          isStopped && styles.drinkGridCardStopped
+        ]}
+      >
+        <View style={styles.drinkGridImageWrapper}>
           {imageUrl ? (
             <Image
               source={{ uri: imageUrl }}
-              style={styles.drinkImage}
+              style={styles.drinkGridImage}
               resizeMode="cover"
             />
           ) : (
-            <View style={styles.noImageBox}>
-              <FontAwesome5 name="coffee" size={22} color="#fff" />
+            <View style={styles.drinkGridNoImage}>
+              <FontAwesome5 name="coffee" size={24} color="#8d6e63" />
             </View>
           )}
-        </View>
-
-        <View style={styles.info}>
-          <Text style={styles.name}>{item.tenDoUong}</Text>
-
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 }}>
-            <Text style={styles.price}>
-              {Number(item.donGia || 0).toLocaleString("vi-VN")}đ
+          <View style={[styles.priceBadge, isStopped && styles.priceBadgeStopped]}>
+            <Text style={styles.priceBadgeText}>
+              {Math.round(drink.donGia / 1000)}k
             </Text>
-            <View
-              style={[
-                styles.statusBadge,
-                item.trangThai === "Dừng bán" ? styles.statusBadgeStop : styles.statusBadgeActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.statusBadgeText,
-                  item.trangThai === "Dừng bán" ? styles.statusBadgeTextStop : styles.statusBadgeTextActive,
-                ]}
-              >
-                {item.trangThai || "Đang bán"}
-              </Text>
-            </View>
-            <View style={[styles.statusBadge, { backgroundColor: "#efebe9", borderColor: "#d7ccc8" }]}>
-              <Text style={[styles.statusBadgeText, { color: "#4b3621" }]}>
-                {item.danhMuc || "Khác"}
-              </Text>
-            </View>
           </View>
+        </View>
 
-          <Text style={styles.desc} numberOfLines={2}>
-            {item.moTa || "Không có mô tả"}
+        <View style={styles.drinkGridInfo}>
+          <Text style={styles.drinkGridName} numberOfLines={2}>
+            {drink.tenDoUong}
           </Text>
-
-          <Text style={styles.imageName}>
-            Ảnh: {item.hinhAnh || "Chưa có ảnh"}
+          <Text style={[styles.drinkStatusText, isStopped ? styles.statusStop : styles.statusActive]}>
+            {drink.trangThai || "Đang bán"}
           </Text>
         </View>
 
-        <View style={styles.actions}>
+        <View style={styles.gridCardActions}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.editBtn]}
-            onPress={() => openEditModal(item)}
+            style={[styles.gridActionBtn, styles.editBtn]}
+            onPress={() => openEditModal(drink)}
           >
-            <FontAwesome5 name="edit" size={14} color="#fff" />
+            <FontAwesome5 name="edit" size={12} color="#fff" />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[
-              styles.actionBtn,
-              item.trangThai === "Dừng bán" ? styles.resumeBtn : styles.stopBtn,
+              styles.gridActionBtn,
+              isStopped ? styles.resumeBtn : styles.stopBtn,
             ]}
-            onPress={() => handleToggleStatus(item)}
+            onPress={() => handleToggleStatus(drink)}
           >
             <FontAwesome5
-              name={item.trangThai === "Dừng bán" ? "play" : "ban"}
-              size={12}
+              name={isStopped ? "play" : "ban"}
+              size={10}
               color="#fff"
             />
           </TouchableOpacity>
         </View>
       </View>
     );
+  };
+
+  const renderCategorySection = (catName) => {
+    // Lọc ra các món uống thuộc danh mục này từ danh sách `searchedDrinks` gốc
+    const catDrinks = searchedDrinks.filter((d) => d.danhMuc === catName);
+    
+    // Nếu danh mục trống và không phải là danh mục do người dùng tạo thủ công, ẩn nó đi
+    const isCustom = createdCategories.includes(catName);
+    if (catDrinks.length === 0 && !isCustom) return null;
+
+    const isSystemDefault = ["Tất cả", "Khác", "Cà phê", "Trà", "Trà sữa", "Sinh tố & Nước ép", "Matcha"].includes(catName);
+
+    return (
+      <View key={catName} style={styles.categorySection}>
+        <View style={styles.categorySectionHeader}>
+          <FontAwesome5 name="folder-open" size={13} color="#8d6e63" style={{ marginRight: 8 }} />
+          <Text style={styles.categoryHeaderTitle}>{catName.toUpperCase()}</Text>
+
+          {/* Cặp nút Sửa & Xóa danh mục */}
+          {!isSystemDefault && (
+            <View style={{ flexDirection: "row", gap: 10, marginLeft: 10 }}>
+              <TouchableOpacity
+                onPress={() => handleEditCategoryName(catName)}
+                style={styles.categoryHeaderBtn}
+              >
+                <FontAwesome5 name="pen" size={11} color="#1976D2" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleDeleteCategory(catName)}
+                style={styles.categoryHeaderBtn}
+              >
+                <FontAwesome5 name="trash" size={11} color="#D32F2F" />
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          <View style={styles.categoryHeaderLine} />
+        </View>
+        
+        {catDrinks.length === 0 ? (
+          <Text style={styles.emptyCatText}>Danh mục này chưa có đồ uống nào. Nhấn "+ Thêm món" để thêm.</Text>
+        ) : (
+          <View style={styles.gridContainer}>
+            {catDrinks.map((drink) => renderDrinkGridItem(drink))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderDrinksList = () => {
+    if (searchedDrinks.length === 0) {
+      return <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>;
+    }
+
+    if (searchQuery.trim().length > 0) {
+      return (
+        <View style={styles.gridContainer}>
+          {searchedDrinks.map((drink) => renderDrinkGridItem(drink))}
+        </View>
+      );
+    }
+
+    if (selectedCategory === "Tất cả") {
+      const categoriesToRender = CATEGORIES.filter((c) => c !== "Tất cả");
+      return (
+        <View>
+          {categoriesToRender.map((cat) => renderCategorySection(cat))}
+        </View>
+      );
+    } else {
+      return renderCategorySection(selectedCategory);
+    }
   };
 
   if (isLoading && drinks.length === 0) {
@@ -331,6 +615,11 @@ export default function MenuScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="transparent"
+        translucent
+      />
       <View style={styles.headerBox}>
         <View style={styles.titleWrapper}>
           <TouchableOpacity
@@ -342,22 +631,75 @@ export default function MenuScreen({ navigation }) {
           <Text style={styles.title}>Quản lý menu</Text>
         </View>
 
-        <TouchableOpacity style={styles.addBtn} onPress={openCreateModal}>
-          <FontAwesome5 name="plus" size={14} color="#fff" />
-          <Text style={styles.addText}>Thêm món</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <TouchableOpacity style={styles.addCategoryBtn} onPress={() => setCategoryModalVisible(true)}>
+            <FontAwesome5 name="folder-plus" size={13} color="#4b3621" />
+            <Text style={styles.addCategoryText}>Thêm danh mục</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.addBtn} onPress={openCreateModal}>
+            <FontAwesome5 name="plus" size={13} color="#fff" />
+            <Text style={styles.addText}>Thêm món</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <FlatList
-        data={drinks}
-        keyExtractor={(item, index) => String(item.maDoUong ?? index)}
-        renderItem={renderDrink}
+      {/* Search Bar for Drinks */}
+      <View style={styles.searchWrapper}>
+        <FontAwesome5 name="search" size={14} color="#8d6e63" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Tìm kiếm đồ uống theo tên..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#aaa"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearSearchBtn}>
+            <FontAwesome5 name="times-circle" size={14} color="#8d6e63" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Category Tab Bar */}
+      <View style={{ height: 48, marginBottom: 12 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingRight: 16 }}
+        >
+          {CATEGORIES.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            return (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.categoryTab,
+                  isSelected && styles.categoryTabActive,
+                ]}
+                onPress={() => setSelectedCategory(cat)}
+              >
+                <Text
+                  style={[
+                    styles.categoryTabText,
+                    isSelected && styles.categoryTabTextActive,
+                  ]}
+                >
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      <ScrollView
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>Chưa có đồ uống nào</Text>
-        }
-      />
+        showsVerticalScrollIndicator={true}
+      >
+        {renderDrinksList()}
+      </ScrollView>
 
       <Modal visible={modalVisible} animationType="slide">
         <SafeAreaView style={styles.modalContainer}>
@@ -378,12 +720,47 @@ export default function MenuScreen({ navigation }) {
               keyboardType="numeric"
             />
             <Input label="Mô tả" value={moTa} onChangeText={setMoTa} />
-            <Input
-              label="Danh mục"
-              value={danhMuc}
-              onChangeText={setDanhMuc}
-              placeholder="Ví dụ: Cà phê, Trà sữa, Matcha..."
-            />
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Danh mục đồ uống</Text>
+              <TextInput
+                style={styles.input}
+                value={danhMuc}
+                onChangeText={setDanhMuc}
+                placeholder="Ví dụ: Cà phê, Trà sữa, Matcha..."
+                placeholderTextColor="#bbb"
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 8 }}
+                contentContainerStyle={{ gap: 8, paddingRight: 16 }}
+              >
+                {quickCategories.map((cat) => {
+                  const isSelected = danhMuc === cat;
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[
+                        styles.quickCatCapsule,
+                        isSelected && styles.quickCatCapsuleActive,
+                      ]}
+                      onPress={() => setDanhMuc(cat)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.quickCatCapsuleText,
+                          isSelected && styles.quickCatCapsuleTextActive,
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Trạng thái kinh doanh</Text>
@@ -462,6 +839,57 @@ export default function MenuScreen({ navigation }) {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Modal Thêm/Sửa Danh Mục Mới */}
+      <Modal
+        visible={categoryModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setCategoryModalVisible(false);
+          setNewCategoryName("");
+          setRenamingCategory(null);
+        }}
+      >
+        <View style={styles.categoryModalOverlay}>
+          <View style={styles.categoryModalContent}>
+            <Text style={styles.categoryModalTitle}>
+              {renamingCategory ? "Sửa tên danh mục" : "Thêm danh mục mới"}
+            </Text>
+            
+            <TextInput
+              style={styles.categoryModalInput}
+              placeholder="Nhập tên danh mục..."
+              value={newCategoryName}
+              onChangeText={setNewCategoryName}
+              placeholderTextColor="#bbb"
+              autoFocus={true}
+            />
+
+            <View style={styles.categoryModalButtons}>
+              <TouchableOpacity
+                style={[styles.categoryModalBtn, styles.categoryCancelBtn]}
+                onPress={() => {
+                  setCategoryModalVisible(false);
+                  setNewCategoryName("");
+                  setRenamingCategory(null);
+                }}
+              >
+                <Text style={styles.categoryCancelText}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.categoryModalBtn, styles.categorySubmitBtn]}
+                onPress={submitNewCategory}
+              >
+                <Text style={styles.categorySubmitText}>
+                  {renamingCategory ? "Cập nhật" : "Thêm"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -478,6 +906,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f1e9",
     padding: 16,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 12 : 16,
     height: Platform.OS === "web" ? "100vh" : "100%",
     maxHeight: Platform.OS === "web" ? "100vh" : "100%",
     overflow: "hidden",
@@ -521,6 +950,52 @@ const styles = StyleSheet.create({
   addText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  categoryTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    height: 38,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  categoryTabActive: {
+    backgroundColor: "#4b3621",
+    borderColor: "#4b3621",
+  },
+  categoryTabText: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#8d6e63",
+  },
+  categoryTabTextActive: {
+    color: "#fff",
+  },
+  quickCatCapsule: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quickCatCapsuleActive: {
+    backgroundColor: "#4b3621",
+    borderColor: "#4b3621",
+  },
+  quickCatCapsuleText: {
+    fontSize: 12,
+    color: "#8d6e63",
+    fontWeight: "bold",
+  },
+  quickCatCapsuleTextActive: {
+    color: "#fff",
   },
   listContent: {
     paddingBottom: 120,
@@ -567,9 +1042,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -762,5 +1237,266 @@ const styles = StyleSheet.create({
   },
   dropdownOptionTextSelected: {
     color: "#fff",
+  },
+  categorySection: {
+    marginBottom: 22,
+  },
+  categorySectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  categoryHeaderTitle: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#8d6e63",
+    letterSpacing: 1,
+  },
+  categoryHeaderLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#eadfd3",
+    marginLeft: 10,
+  },
+  categorySectionBody: {
+    flexDirection: "column",
+  },
+  searchWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#4b3621",
+    fontSize: 14,
+    paddingVertical: 10,
+  },
+  clearSearchBtn: {
+    padding: 4,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  drinkGridCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    width: Platform.OS === "web" ? "23.5%" : "30.5%",
+    minWidth: 100,
+    maxWidth: 160,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    position: "relative",
+    overflow: "hidden",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    padding: 10,
+    alignItems: "center",
+  },
+  drinkGridCardStopped: {
+    opacity: 0.8,
+    backgroundColor: "#fcfaf7",
+    borderColor: "#e0d0c0",
+  },
+  drinkGridImageWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    overflow: "hidden",
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+    position: "relative",
+  },
+  drinkGridImage: {
+    width: "100%",
+    height: "100%",
+  },
+  drinkGridNoImage: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  priceBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "#2e7d32",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#fff",
+  },
+  priceBadgeStopped: {
+    backgroundColor: "#c62828",
+  },
+  priceBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  drinkGridInfo: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  drinkGridName: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#4b3621",
+    textAlign: "center",
+    lineHeight: 16,
+    height: 32,
+  },
+  drinkStatusText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    marginTop: 4,
+  },
+  statusActive: {
+    color: "#2e7d32",
+  },
+  statusStop: {
+    color: "#c62828",
+  },
+  gridCardActions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+    width: "100%",
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#f5ece3",
+    paddingTop: 8,
+  },
+  gridActionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addCategoryBtn: {
+    flexDirection: "row",
+    backgroundColor: "transparent",
+    borderWidth: 1.5,
+    borderColor: "#4b3621",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    gap: 6,
+  },
+  addCategoryText: {
+    color: "#4b3621",
+    fontWeight: "bold",
+    fontSize: 13,
+  },
+  categoryModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  categoryModalContent: {
+    backgroundColor: "#f8f1e9",
+    borderRadius: 18,
+    width: "90%",
+    maxWidth: 340,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+  },
+  categoryModalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#4b3621",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  categoryModalInput: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    borderRadius: 12,
+    padding: 12,
+    color: "#4b3621",
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  categoryModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  categoryModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categoryCancelBtn: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+  },
+  categoryCancelText: {
+    color: "#8d6e63",
+    fontWeight: "bold",
+  },
+  categorySubmitBtn: {
+    backgroundColor: "#4b3621",
+  },
+  categorySubmitText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  categoryHeaderBtn: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyCatText: {
+    color: "#8d6e63",
+    fontStyle: "italic",
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    textAlign: "center",
   },
 });

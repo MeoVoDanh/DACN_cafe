@@ -5,16 +5,16 @@ import {
   View,
   TouchableOpacity,
   SafeAreaView,
-  FlatList,
   ActivityIndicator,
   ScrollView,
   Modal,
   Platform,
+  StatusBar,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchInvoices } from "../../redux/invoiceSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
-import api from "../../redux/api"; // Import api trực tiếp để lấy chi tiết hóa đơn nhanh chóng
+import api from "../../redux/api";
 
 const getLocalDateString = (value) => {
   if (!value) return "";
@@ -25,95 +25,197 @@ const getLocalDateString = (value) => {
   return `${y}-${m}-${d}`;
 };
 
+const formatDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  
+  const d = date.getDate().toString().padStart(2, "0");
+  const m = (date.getMonth() + 1).toString().padStart(2, "0");
+  const y = date.getFullYear();
+  
+  const hh = date.getHours().toString().padStart(2, "0");
+  const mm = date.getMinutes().toString().padStart(2, "0");
+  const ss = date.getSeconds().toString().padStart(2, "0");
+  
+  if (hh === "00" && mm === "00" && ss === "00") {
+    return `${d}/${m}/${y}`;
+  }
+  
+  return `${hh}:${mm}:${ss} - ${d}/${m}/${y}`;
+};
+
 export default function RevenueScreen({ navigation }) {
   const dispatch = useDispatch();
   const { invoices, isLoading } = useSelector((state) => state.invoice);
 
-  // Khởi tạo bộ lọc mặc định là Tháng hiện tại
-  const currentDate = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
-  
-  // Trạng thái hiển thị Lịch chọn ngày (Calendar Modal)
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [activeDateFilter, setActiveDateFilter] = useState(null); // Ngày được chọn để lọc (YYYY-MM-DD)
+  const todayStr = useMemo(() => getLocalDateString(new Date()), []);
+  const [ngayLam, setNgayLam] = useState(todayStr);
 
-  // Trạng thái hiển thị Chi tiết Hóa đơn (Details Modal)
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  
+  // Accordion control for shifts
+  const [expandedShift, setExpandedShift] = useState("Ca Sáng"); // Mở sẵn Ca Sáng cho trực quan
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  // Invoice detail states
   const [showDetails, setShowDetails] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState(null); // Hóa đơn đang chọn xem chi tiết
-  const [invoiceDetails, setInvoiceDetails] = useState([]); // Món ăn trong hóa đơn
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [invoiceDetails, setInvoiceDetails] = useState([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   useEffect(() => {
     dispatch(fetchInvoices());
   }, [dispatch]);
 
-  // Danh sách các tháng để hiển thị thanh chọn
-  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const BASE_URL = api.defaults.baseURL.replace("/api", "");
 
-  // Ngày hôm nay động
-  const todayStr = useMemo(() => {
-    return getLocalDateString(new Date());
-  }, []);
+  // Sync calendar month/year when ngayLam changes
+  useEffect(() => {
+    if (ngayLam) {
+      const [y, m] = ngayLam.split("-");
+      setSelectedMonth(parseInt(m, 10));
+      setSelectedYear(parseInt(y, 10));
+    }
+  }, [ngayLam]);
 
-  const todayLabel = useMemo(() => {
-    const today = new Date();
-    return `Hôm nay (${today.getDate()}/${today.getMonth() + 1})`;
-  }, []);
-
-  const handleSelectToday = () => {
-    const today = new Date();
-    setSelectedMonth(today.getMonth() + 1);
-    setSelectedYear(today.getFullYear());
-    setActiveDateFilter(todayStr);
+  // Dynamic Date Navigation
+  const handlePrevDay = () => {
+    const parts = ngayLam.split("-");
+    let currentDate = new Date();
+    if (parts.length === 3) {
+      currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    currentDate.setDate(currentDate.getDate() - 1);
+    setNgayLam(getLocalDateString(currentDate));
   };
 
-  // 1. Lọc hóa đơn theo tháng và năm được chọn
-  const monthlyInvoices = useMemo(() => {
+  const handleNextDay = () => {
+    const parts = ngayLam.split("-");
+    let currentDate = new Date();
+    if (parts.length === 3) {
+      currentDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    currentDate.setDate(currentDate.getDate() + 1);
+    setNgayLam(getLocalDateString(currentDate));
+  };
+
+  const formatDateDisplayLarge = (dateStr) => {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return dateStr;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const date = new Date(year, month, day);
+    const days = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+    const dayName = days[date.getDay()];
+    return `${dayName}, ${parts[2]}/${parts[1]}/${parts[0]}`;
+  };
+
+  // Filter invoices for the chosen date
+  const dailyInvoices = useMemo(() => {
     return invoices.filter((item) => {
       const d = new Date(item.createdAt || item.ngaylap);
-      return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
+      return getLocalDateString(d) === ngayLam;
     });
-  }, [invoices, selectedMonth, selectedYear]);
+  }, [invoices, ngayLam]);
 
-  // 2. Tính toán tổng hợp cho THÁNG được chọn
-  const monthlyStats = useMemo(() => {
-    const totalOrders = monthlyInvoices.length;
-    const paidOrders = monthlyInvoices.filter((item) => item.trangthaithanhtoan === "Đã thanh toán");
+  // Group invoices into shifts based on creation hour
+  const shiftGroupedData = useMemo(() => {
+    const sang = [];
+    const chieu = [];
+    const toi = [];
+    const ngoaiCa = [];
+
+    dailyInvoices.forEach((item) => {
+      const d = new Date(item.createdAt || item.ngaylap);
+      const hour = d.getHours();
+
+      if (hour >= 7 && hour < 12) {
+        sang.push(item);
+      } else if (hour >= 12 && hour < 17) {
+        chieu.push(item);
+      } else if (hour >= 17 && hour < 22) {
+        toi.push(item);
+      } else {
+        ngoaiCa.push(item);
+      }
+    });
+
+    const getStats = (list) => {
+      const paid = list.filter((item) => item.trangthaithanhtoan === "Đã thanh toán");
+      const revenue = paid.reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
+      
+      const cashRevenue = paid
+        .filter((item) => !item.phuongThuc || item.phuongThuc === "TienMat")
+        .reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
+
+      const transferRevenue = paid
+        .filter((item) => item.phuongThuc === "ChuyenKhoan")
+        .reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
+
+      return {
+        totalOrders: list.length,
+        paidOrders: paid.length,
+        revenue,
+        cashRevenue,
+        transferRevenue,
+      };
+    };
+
+    return {
+      sang: { list: sang, stats: getStats(sang) },
+      chieu: { list: chieu, stats: getStats(chieu) },
+      toi: { list: toi, stats: getStats(toi) },
+      ngoaiCa: { list: ngoaiCa, stats: getStats(ngoaiCa) },
+    };
+  }, [dailyInvoices]);
+
+  // Daily totals
+  const dailyStats = useMemo(() => {
+    const totalOrders = dailyInvoices.length;
+    const paidOrders = dailyInvoices.filter((item) => item.trangthaithanhtoan === "Đã thanh toán");
     const totalRevenue = paidOrders.reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
     
+    const cashRevenue = paidOrders
+      .filter((item) => !item.phuongThuc || item.phuongThuc === "TienMat")
+      .reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
+
+    const transferRevenue = paidOrders
+      .filter((item) => item.phuongThuc === "ChuyenKhoan")
+      .reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
+
     return {
       totalOrders,
-      paidCount: paidOrders.length,
       totalRevenue,
+      cashRevenue,
+      transferRevenue,
     };
-  }, [monthlyInvoices]);
+  }, [dailyInvoices]);
 
-  // Xác định những ngày nào trong tháng đang có hóa đơn để hiển thị chấm tròn nhỏ trên lịch
+  // Set of dates with orders in the current month to show dots on Calendar
   const daysWithOrders = useMemo(() => {
     const dates = new Set();
-    monthlyInvoices.forEach((item) => {
+    invoices.forEach((item) => {
       const d = new Date(item.createdAt || item.ngaylap);
-      const dateStr = getLocalDateString(d); // YYYY-MM-DD
-      dates.add(dateStr);
+      if (d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear) {
+        dates.add(getLocalDateString(d));
+      }
     });
     return dates;
-  }, [monthlyInvoices]);
+  }, [invoices, selectedMonth, selectedYear]);
 
-  // Tính toán lưới ngày cho lịch
+  // Calendar days grid calculation
   const calendarDays = useMemo(() => {
     const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
-    // Lấy thứ của ngày đầu tiên trong tháng (0 = CN, 1 = T2, ..., 6 = T7)
     const firstDayIndex = new Date(selectedYear, selectedMonth - 1, 1).getDay();
-    
     const daysArray = [];
     
-    // Thêm các ô trống đệm trước ngày đầu tiên
     for (let i = 0; i < firstDayIndex; i++) {
       daysArray.push({ id: `empty-${i}`, isPadding: true });
     }
     
-    // Thêm các ngày thực tế của tháng
     for (let day = 1; day <= daysInMonth; day++) {
       const dateString = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       daysArray.push({
@@ -123,45 +225,13 @@ export default function RevenueScreen({ navigation }) {
         isPadding: false,
       });
     }
-    
     return daysArray;
   }, [selectedMonth, selectedYear]);
 
-  // 3. Lọc hóa đơn theo ngày được tick chọn trên lịch
-  const filteredInvoices = useMemo(() => {
-    let result = monthlyInvoices;
+  const toggleExpandShift = (shiftName) => {
+    setExpandedShift(expandedShift === shiftName ? null : shiftName);
+  };
 
-    if (activeDateFilter) {
-      result = result.filter((item) => {
-        const d = new Date(item.createdAt || item.ngaylap);
-        const dateStr = getLocalDateString(d); // YYYY-MM-DD
-        return dateStr === activeDateFilter;
-      });
-    }
-
-    return result;
-  }, [monthlyInvoices, activeDateFilter]);
-
-  // 4. Tính toán tổng hợp cho danh sách ĐÃ LỌC
-  const filteredStats = useMemo(() => {
-    const totalOrders = filteredInvoices.length;
-    const paidOrders = filteredInvoices.filter((item) => item.trangthaithanhtoan === "Đã thanh toán");
-    const totalRevenue = paidOrders.reduce((sum, item) => sum + Number(item.tongtien || 0), 0);
-
-    return {
-      totalOrders,
-      totalRevenue,
-    };
-  }, [filteredInvoices]);
-
-  // Định dạng hiển thị ngày lọc (VD: 2026-05-23 -> 23/05/2026)
-  const formattedFilterDate = useMemo(() => {
-    if (!activeDateFilter) return "";
-    const [y, m, d] = activeDateFilter.split("-");
-    return `${d}/${m}/${y}`;
-  }, [activeDateFilter]);
-
-  // Hàm gọi API lấy chi tiết danh sách món ăn trong hóa đơn khi nhấn click
   const handleViewInvoiceDetails = async (invoice) => {
     setSelectedInvoice(invoice);
     setInvoiceDetails([]);
@@ -170,56 +240,115 @@ export default function RevenueScreen({ navigation }) {
     
     try {
       const response = await api.get(`/hoadon/${invoice.maHoaDon}`);
-      // response.data có định dạng: { hoaDon: {...}, chiTiet: [...] }
       if (response.data && response.data.chiTiet) {
         setInvoiceDetails(response.data.chiTiet);
       }
     } catch (error) {
-      console.error("Lỗi lấy chi tiết món ăn của hóa đơn:", error);
+      console.error("Lỗi lấy chi tiết hóa đơn:", error);
     } finally {
       setLoadingDetails(false);
     }
   };
 
-  const renderInvoiceItem = ({ item }) => {
-    const isPaid = item.trangthaithanhtoan === "Đã thanh toán";
+  const isWeb = Platform.OS === "web";
+
+  // Shift card render helper
+  const renderShiftCard = (title, time, icon, data, bgColor, iconBg, shiftKey) => {
+    const isExpanded = expandedShift === shiftKey;
+    const { list, stats } = data;
+
     return (
-      <TouchableOpacity 
-        style={styles.invoiceCard}
-        onPress={() => handleViewInvoiceDetails(item)}
-        activeOpacity={0.85}
-      >
-        <View style={styles.invoiceHeader}>
-          <View>
-            <Text style={styles.invoiceTitle}>Hóa đơn #{item.maHoaDon}</Text>
-            <Text style={styles.staffName}>
-              <FontAwesome5 name="user-edit" size={10} color="#8d6e63" /> Nhân viên: {item.HoTen || "Không rõ"}
+      <View style={styles.shiftCard}>
+        <TouchableOpacity
+          style={[styles.shiftCardHeader, { backgroundColor: bgColor }]}
+          onPress={() => toggleExpandShift(shiftKey)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+            <View style={[styles.shiftIconBox, { backgroundColor: iconBg }]}>
+              <FontAwesome5 name={icon} size={15} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.shiftCardTitle}>{title}</Text>
+              <Text style={styles.shiftCardTime}>{time}</Text>
+            </View>
+          </View>
+          
+          <View style={{ alignItems: "flex-end", marginRight: 15 }}>
+            <Text style={styles.shiftRevenueText}>
+              {stats.revenue.toLocaleString("vi-VN")}đ
+            </Text>
+            <Text style={styles.shiftOrdersCountText}>
+              💵{stats.cashRevenue.toLocaleString("vi-VN")} | 💳{stats.transferRevenue.toLocaleString("vi-VN")}
             </Text>
           </View>
-          <View style={[styles.statusBadge, isPaid ? styles.paidBadge : styles.unpaidBadge]}>
-            <Text style={styles.statusText}>{item.trangthaithanhtoan}</Text>
-          </View>
-        </View>
 
-        <View style={styles.invoiceDivider} />
+          <FontAwesome5
+            name={isExpanded ? "chevron-up" : "chevron-down"}
+            size={12}
+            color="#4b3621"
+          />
+        </TouchableOpacity>
 
-        <View style={styles.invoiceFooter}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text style={styles.invoiceTime}>
-              <FontAwesome5 name="clock" size={10} color="#8d6e63" /> {formatDate(item.createdAt || item.ngaylap)}
-            </Text>
-            <Text style={styles.viewDetailsText}>• Bấm xem chi tiết</Text>
+        {isExpanded && (
+          <View style={styles.shiftCardBody}>
+            {list.length === 0 ? (
+              <View style={styles.shiftEmptyContainer}>
+                <FontAwesome5 name="store-slash" size={24} color="#d7ccc8" style={{ marginBottom: 6 }} />
+                <Text style={styles.shiftEmptyText}>Chưa phát sinh hóa đơn nào trong ca này</Text>
+              </View>
+            ) : (
+              list.map((item) => {
+                const isPaid = item.trangthaithanhtoan === "Đã thanh toán";
+                return (
+                  <TouchableOpacity
+                    key={item.maHoaDon}
+                    style={styles.shiftInvoiceRow}
+                    onPress={() => handleViewInvoiceDetails(item)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={styles.shiftInvoiceTitle}>Đơn #{item.maHoaDon}</Text>
+                        <Text style={styles.shiftInvoiceTime}>
+                          {formatDate(item.createdAt || item.ngaylap).split(" - ")[0]}
+                        </Text>
+                      </View>
+                      <Text style={styles.shiftInvoiceStaff}>
+                        <FontAwesome5 name="user-tie" size={10} color="#8d6e63" /> Lập bởi: {item.HoTen || "Không rõ"}
+                      </Text>
+                    </View>
+
+                    <View style={{ alignItems: "flex-end", gap: 4 }}>
+                      <Text style={styles.shiftInvoicePrice}>
+                        {Number(item.tongtien || 0).toLocaleString("vi-VN")}đ
+                      </Text>
+                      <View style={[
+                        styles.miniBadge, 
+                        isPaid ? styles.paidBadge : styles.unpaidBadge
+                      ]}>
+                        <Text style={[styles.miniBadgeText, isPaid ? styles.paidText : styles.unpaidText]}>
+                          {isPaid ? (item.phuongThuc === "ChuyenKhoan" ? "💳 CK" : "💵 TM") : "Chưa trả"}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </View>
-          <Text style={styles.invoiceTotal}>
-            {Number(item.tongtien || 0).toLocaleString("vi-VN")}đ
-          </Text>
-        </View>
-      </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="transparent"
+        translucent
+      />
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.navigate("DashboardScreen")} style={styles.backBtn}>
@@ -232,139 +361,117 @@ export default function RevenueScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.mainContainer} showsVerticalScrollIndicator={false}>
-        {/* THANH CHỌN THÁNG (Capsule list scroll ngang) */}
-        <Text style={styles.sectionTitle}>Chọn tháng báo cáo (Năm {selectedYear})</Text>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false} 
-          contentContainerStyle={styles.monthScroll}
-        >
-          {months.map((month) => {
-            const isSelected = selectedMonth === month;
-            return (
-              <TouchableOpacity
-                key={month}
-                style={[styles.monthCapsule, isSelected && styles.monthCapsuleActive]}
-                onPress={() => {
-                  setSelectedMonth(month);
-                  setActiveDateFilter(null); // Reset lọc ngày khi đổi tháng
-                }}
-              >
-                <Text style={[styles.monthText, isSelected && styles.monthTextActive]}>
-                  Tháng {month}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        {/* PREMIUM DATE SELECTOR */}
+        <Text style={styles.sectionTitle}>Chọn ngày làm việc</Text>
+        <View style={styles.dateSelectorContainer}>
+          <TouchableOpacity onPress={handlePrevDay} style={styles.arrowBtn} activeOpacity={0.7}>
+            <FontAwesome5 name="chevron-left" size={18} color="#4b3621" />
+          </TouchableOpacity>
 
-        {/* TỔNG KẾT THÁNG */}
+          <View style={styles.dateCenterWrapper}>
+            <TouchableOpacity onPress={() => setShowCalendar(true)} style={styles.dateTextTrigger} activeOpacity={0.7}>
+              <FontAwesome5 name="calendar-day" size={18} color="#8d6e63" style={styles.centerCalendarIcon} />
+              <Text style={styles.dateTextLarge}>
+                {formatDateDisplayLarge(ngayLam)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={handleNextDay} style={styles.arrowBtn} activeOpacity={0.7}>
+            <FontAwesome5 name="chevron-right" size={18} color="#4b3621" />
+          </TouchableOpacity>
+        </View>
+
+        {/* DAILY SUMMARY CARD */}
         <View style={styles.monthSummaryCard}>
           <View style={styles.summaryHeader}>
-            <FontAwesome5 name="calendar-alt" size={16} color="#c9a66b" />
-            <Text style={styles.summaryTitle}>TỔNG QUAN THÁNG {selectedMonth}/{selectedYear}</Text>
+            <FontAwesome5 name="chart-line" size={16} color="#c9a66b" />
+            <Text style={styles.summaryTitle}>TỔNG QUAN NGÀY {ngayLam.split("-").reverse().join("/")}</Text>
           </View>
           
           <View style={styles.summaryGrid}>
             <View style={styles.summaryCol}>
               <Text style={styles.summaryVal}>
-                {monthlyStats.totalRevenue.toLocaleString("vi-VN")}đ
+                {dailyStats.totalRevenue.toLocaleString("vi-VN")}đ
               </Text>
-              <Text style={styles.summaryLbl}>Doanh thu tháng</Text>
+              <Text style={styles.summaryLbl}>Tổng doanh thu ngày</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryCol}>
-              <Text style={styles.summaryVal}>{monthlyStats.totalOrders}</Text>
+              <Text style={styles.summaryVal}>{dailyStats.totalOrders}</Text>
               <Text style={styles.summaryLbl}>Tổng đơn đã bán</Text>
             </View>
           </View>
-        </View>
 
-        {/* BỘ LỌC CHỌN LỊCH NGÀY */}
-        <Text style={styles.sectionTitle}>Lọc đơn theo ngày cụ thể</Text>
-        <View style={styles.filterBox}>
-          {/* Thanh hiển thị & nhấn để mở Lịch */}
-          <TouchableOpacity 
-            style={styles.calendarSelector}
-            onPress={() => setShowCalendar(true)}
-            activeOpacity={0.8}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <FontAwesome5 name="calendar-day" size={16} color="#8d6e63" style={{ marginRight: 10 }} />
-              <Text style={[styles.calendarText, activeDateFilter && styles.calendarTextActive]}>
-                {activeDateFilter ? `Ngày đã chọn: ${formattedFilterDate}` : "Nhấn để mở lịch chọn ngày cụ thể..."}
-              </Text>
-            </View>
-            
-            {activeDateFilter ? (
-              <TouchableOpacity 
-                onPress={() => setActiveDateFilter(null)}
-                style={styles.clearDateBtn}
-              >
-                <FontAwesome5 name="times-circle" size={16} color="#d32f2f" />
-              </TouchableOpacity>
-            ) : (
-              <FontAwesome5 name="chevron-down" size={12} color="#8d6e63" />
-            )}
-          </TouchableOpacity>
+          <View style={styles.summaryMethodDivider} />
 
-          {/* Các nút lọc nhanh (Đã lược bỏ nút Hôm qua) */}
-          <View style={styles.quickFilterRow}>
-            <TouchableOpacity
-              style={[styles.quickFilterBtn, activeDateFilter === null && styles.quickFilterBtnActive]}
-              onPress={() => setActiveDateFilter(null)}
-            >
-              <Text style={[styles.quickFilterText, activeDateFilter === null && styles.quickFilterTextActive]}>
-                Tất cả đơn tháng {selectedMonth}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickFilterBtn, activeDateFilter === todayStr && styles.quickFilterBtnActive]}
-              onPress={handleSelectToday}
-            >
-              <Text style={[styles.quickFilterText, activeDateFilter === todayStr && styles.quickFilterTextActive]}>
-                {todayLabel}
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.summaryPaymentMethodsRow}>
+            <Text style={styles.summaryPaymentText}>
+              💵 Tiền mặt: <Text style={{fontWeight: "bold", color: "#fff"}}>{dailyStats.cashRevenue.toLocaleString("vi-VN")}đ</Text>
+            </Text>
+            <View style={styles.summaryPaymentVerticalDivider} />
+            <Text style={styles.summaryPaymentText}>
+              💳 Chuyển khoản: <Text style={{fontWeight: "bold", color: "#fff"}}>{dailyStats.transferRevenue.toLocaleString("vi-VN")}đ</Text>
+            </Text>
           </View>
         </View>
 
-        {/* THÔNG TIN TỔNG HỢP DANH SÁCH LỌC */}
-        <View style={styles.filteredStatsRow}>
-          <Text style={styles.resultsCount}>
-            Kết quả: <Text style={{ fontWeight: "bold" }}>{filteredInvoices.length}</Text> đơn hàng
-          </Text>
-          <Text style={styles.resultsRevenue}>
-            Doanh thu nhóm: <Text style={{ fontWeight: "bold", color: "#2e7d32" }}>{filteredStats.totalRevenue.toLocaleString("vi-VN")}đ</Text>
-          </Text>
-        </View>
-
-        {/* DANH SÁCH HÓA ĐƠN ĐÃ LỌC */}
+        {/* SHIFTS BREAKDOWN SECTION */}
+        <Text style={styles.sectionTitle}>Báo cáo chi tiết theo Ca</Text>
         {isLoading ? (
           <View style={styles.loaderContainer}>
             <ActivityIndicator size="large" color="#4b3621" />
-            <Text style={styles.loaderText}>Đang tải danh sách hóa đơn...</Text>
-          </View>
-        ) : filteredInvoices.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <FontAwesome5 name="folder-open" size={40} color="#d7ccc8" />
-            <Text style={styles.emptyText}>Không tìm thấy đơn hàng nào trong ngày được chọn</Text>
+            <Text style={styles.loaderText}>Đang tải dữ liệu doanh thu...</Text>
           </View>
         ) : (
-          <FlatList
-            data={filteredInvoices}
-            keyExtractor={(item) => item.maHoaDon.toString()}
-            renderItem={renderInvoiceItem}
-            scrollEnabled={false} // Lồng FlatList vào ScrollView an toàn
-            contentContainerStyle={styles.listContent}
-          />
+          <View style={styles.shiftsListContainer}>
+            {renderShiftCard(
+              "Ca Sáng",
+              "07:00 - 12:00 (5 tiếng)",
+              "sun",
+              shiftGroupedData.sang,
+              "#FFF9C4",
+              "#FBC02D",
+              "Ca Sáng"
+            )}
+            
+            {renderShiftCard(
+              "Ca Chiều",
+              "12:00 - 17:00 (5 tiếng)",
+              "cloud-sun",
+              shiftGroupedData.chieu,
+              "#FFE0B2",
+              "#F57C00",
+              "Ca Chiều"
+            )}
+            
+            {renderShiftCard(
+              "Ca Tối",
+              "17:00 - 22:00 (5 tiếng)",
+              "moon",
+              shiftGroupedData.toi,
+              "#E1BEE7",
+              "#7B1FA2",
+              "Ca Tối"
+            )}
+
+            {/* Chỉ hiện Ngoài Ca khi có đơn ngoài ca để tránh rác giao diện */}
+            {shiftGroupedData.ngoaiCa.list.length > 0 && renderShiftCard(
+              "Ngoài ca làm việc",
+              "Các khung giờ còn lại",
+              "clock",
+              shiftGroupedData.ngoaiCa,
+              "#ECEFF1",
+              "#607D8B",
+              "Ngoài Ca"
+            )}
+          </View>
         )}
 
         <View style={{ height: 50 }} />
       </ScrollView>
 
-      {/* MODAL LỊCH CHỌN NGÀY CỔ ĐIỂN - PHONG CÁCH COFFEE PREMIUM */}
+      {/* CALENDAR MODAL */}
       <Modal
         visible={showCalendar}
         transparent={true}
@@ -383,7 +490,7 @@ export default function RevenueScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Thứ trong tuần */}
+            {/* Week days header */}
             <View style={styles.weekDaysRow}>
               {["CN", "T2", "T3", "T4", "T5", "T6", "T7"].map((day, idx) => (
                 <Text key={day} style={[styles.weekDayText, idx === 0 && { color: "#d32f2f" }]}>
@@ -392,14 +499,14 @@ export default function RevenueScreen({ navigation }) {
               ))}
             </View>
 
-            {/* Lưới các ngày trong tháng */}
+            {/* Days grid */}
             <View style={styles.daysGrid}>
               {calendarDays.map((item) => {
                 if (item.isPadding) {
                   return <View key={item.id} style={styles.dayCellEmpty} />;
                 }
 
-                const isSelected = activeDateFilter === item.dateString;
+                const isSelected = ngayLam === item.dateString;
                 const hasOrders = daysWithOrders.has(item.dateString);
 
                 return (
@@ -410,7 +517,7 @@ export default function RevenueScreen({ navigation }) {
                       isSelected && styles.dayCellActive
                     ]}
                     onPress={() => {
-                      setActiveDateFilter(item.dateString);
+                      setNgayLam(item.dateString);
                       setShowCalendar(false);
                     }}
                   >
@@ -422,7 +529,6 @@ export default function RevenueScreen({ navigation }) {
                       {item.dayNum}
                     </Text>
 
-                    {/* Dấu chấm báo hiệu ngày này có đơn hàng */}
                     {hasOrders && (
                       <View style={[
                         styles.orderDot,
@@ -434,27 +540,46 @@ export default function RevenueScreen({ navigation }) {
               })}
             </View>
 
-            {/* Lớp thông báo chú thích lịch */}
+            {/* Legend / Month selectors in modal */}
             <View style={styles.calendarFooter}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <View style={styles.legendDot} />
                 <Text style={styles.legendText}>Ngày có đơn hàng</Text>
               </View>
-              <TouchableOpacity 
-                style={styles.closeModalBtn}
-                onPress={() => {
-                  setActiveDateFilter(null);
-                  setShowCalendar(false);
-                }}
-              >
-                <Text style={styles.closeModalBtnText}>Xóa bộ lọc ngày</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity 
+                  style={styles.monthNavBtn}
+                  onPress={() => {
+                    if (selectedMonth === 1) {
+                      setSelectedMonth(12);
+                      setSelectedYear(selectedYear - 1);
+                    } else {
+                      setSelectedMonth(selectedMonth - 1);
+                    }
+                  }}
+                >
+                  <FontAwesome5 name="chevron-left" size={10} color="#4b3621" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.monthNavBtn}
+                  onPress={() => {
+                    if (selectedMonth === 12) {
+                      setSelectedMonth(1);
+                      setSelectedYear(selectedYear + 1);
+                    } else {
+                      setSelectedMonth(selectedMonth + 1);
+                    }
+                  }}
+                >
+                  <FontAwesome5 name="chevron-right" size={10} color="#4b3621" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* MODAL CHI TIẾT ĐƠN HÀNG (MÓN ĂN ĐÃ BÁN) */}
+      {/* DETAILED INVOICE DETAILS MODAL */}
       <Modal
         visible={showDetails}
         transparent={true}
@@ -478,18 +603,23 @@ export default function RevenueScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            {/* Tóm tắt thông tin hóa đơn */}
+            {/* Invoice summary info */}
             <View style={styles.detailsSummaryBox}>
               <Text style={styles.detailsSummaryText}>
                 <FontAwesome5 name="user" size={11} color="#8d6e63" /> <Text style={{fontWeight: "bold"}}>Nhân viên lập:</Text> {selectedInvoice?.HoTen || "Không rõ"}
               </Text>
               <Text style={styles.detailsSummaryText}>
-                <FontAwesome5 name="calendar-alt" size={11} color="#8d6e63" /> <Text style={{fontWeight: "bold"}}>Thời gian:</Text> {formatDate(selectedInvoice?.createdAt || selectedInvoice?.ngaylap)}
+                <FontAwesome5 name="calendar-alt" size={11} color="#8d6e63" /> <Text style={{fontWeight: "bold"}}>Thời gian lập:</Text> {formatDate(selectedInvoice?.createdAt || selectedInvoice?.ngaylap)}
               </Text>
               <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
                 <Text style={[styles.detailsSummaryText, {marginRight: 8}]}><Text style={{fontWeight: "bold"}}>Trạng thái:</Text></Text>
-                <View style={[styles.statusBadge, selectedInvoice?.trangthaithanhtoan === "Đã thanh toán" ? styles.paidBadge : styles.unpaidBadge]}>
-                  <Text style={styles.statusText}>{selectedInvoice?.trangthaithanhtoan}</Text>
+                <View style={[
+                  styles.miniBadge, 
+                  selectedInvoice?.trangthaithanhtoan === "Đã thanh toán" ? styles.paidBadge : styles.unpaidBadge
+                ]}>
+                  <Text style={[styles.miniBadgeText, selectedInvoice?.trangthaithanhtoan === "Đã thanh toán" ? styles.paidText : styles.unpaidText]}>
+                    {selectedInvoice?.trangthaithanhtoan}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -497,16 +627,16 @@ export default function RevenueScreen({ navigation }) {
             <View style={styles.detailsDivider} />
             <Text style={styles.detailsListTitle}>DANH SÁCH MÓN ĐÃ BÁN</Text>
 
-            {/* Danh sách món ăn chi tiết */}
+            {/* List of items in invoice */}
             {loadingDetails ? (
               <View style={styles.detailsLoader}>
                 <ActivityIndicator size="large" color="#4b3621" />
-                <Text style={styles.detailsLoaderText}>Đang tải danh sách món ăn...</Text>
+                <Text style={styles.detailsLoaderText}>Đang tải chi tiết đơn hàng...</Text>
               </View>
             ) : invoiceDetails.length === 0 ? (
               <View style={styles.detailsEmptyBox}>
                 <FontAwesome5 name="mug-hot" size={30} color="#d7ccc8" />
-                <Text style={styles.detailsEmptyText}>Không tìm thấy thông tin món ăn nào của hóa đơn này</Text>
+                <Text style={styles.detailsEmptyText}>Không tìm thấy món ăn nào của hóa đơn này</Text>
               </View>
             ) : (
               <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={true}>
@@ -533,7 +663,7 @@ export default function RevenueScreen({ navigation }) {
 
             <View style={styles.detailsDivider} />
 
-            {/* Tổng cộng hóa đơn */}
+            {/* Total invoice sum */}
             <View style={styles.detailsTotalRow}>
               <Text style={styles.detailsTotalLabel}>TỔNG CỘNG HÓA ĐƠN</Text>
               <Text style={styles.detailsTotalValue}>
@@ -541,7 +671,7 @@ export default function RevenueScreen({ navigation }) {
               </Text>
             </View>
 
-            {/* Nút đóng */}
+            {/* Close button */}
             <TouchableOpacity 
               style={styles.closeDetailsModalBtn} 
               onPress={() => setShowDetails(false)}
@@ -555,31 +685,14 @@ export default function RevenueScreen({ navigation }) {
   );
 }
 
-const formatDate = (value) => {
-  if (!value) return "";
-  const date = new Date(value);
-  
-  const d = date.getDate().toString().padStart(2, "0");
-  const m = (date.getMonth() + 1).toString().padStart(2, "0");
-  const y = date.getFullYear();
-  
-  const hh = date.getHours().toString().padStart(2, "0");
-  const mm = date.getMinutes().toString().padStart(2, "0");
-  const ss = date.getSeconds().toString().padStart(2, "0");
-  
-  if (hh === "00" && mm === "00" && ss === "00") {
-    return `${d}/${m}/${y}`;
-  }
-  
-  return `${hh}:${mm}:${ss} - ${d}/${m}/${y}`;
-};
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#f8f1e9",
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 12 : 0,
     height: Platform.OS === "web" ? "100vh" : "100%",
     maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+    overflow: Platform.OS === "web" ? "hidden" : "visible",
   },
   header: {
     flexDirection: "row",
@@ -617,36 +730,59 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.5,
   },
-  monthScroll: {
-    paddingVertical: 4,
-    gap: 8,
+  // Premium Date Selector styles
+  dateSelectorContainer: {
     flexDirection: "row",
-  },
-  monthCapsule: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#fff",
     borderWidth: 1,
     borderColor: "#eadfd3",
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    gap: 12,
   },
-  monthCapsuleActive: {
-    backgroundColor: "#4b3621",
-    borderColor: "#4b3621",
+  arrowBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  monthText: {
-    fontSize: 13,
-    color: "#8d6e63",
+  dateCenterWrapper: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dateTextTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+    width: "100%",
+  },
+  centerCalendarIcon: {
+    marginRight: 10,
+  },
+  dateTextLarge: {
+    fontSize: 15,
     fontWeight: "bold",
-  },
-  monthTextActive: {
-    color: "#fff",
+    color: "#4b3621",
+    textAlign: "center",
   },
   monthSummaryCard: {
     backgroundColor: "#4b3621",
     borderRadius: 16,
     padding: 20,
-    marginTop: 18,
+    marginTop: 14,
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
@@ -691,148 +827,151 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
   },
-  filterBox: {
+  summaryMethodDivider: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    marginVertical: 12,
+  },
+  summaryPaymentMethodsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  summaryPaymentText: {
+    color: "#d7ccc8",
+    fontSize: 12,
+    flex: 1,
+    textAlign: "center",
+  },
+  summaryPaymentVerticalDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  // Shifts breakdown styling
+  shiftsListContainer: {
+    flexDirection: "column",
+    gap: 14,
+    marginTop: 4,
+  },
+  shiftCard: {
     backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 14,
     borderWidth: 1,
-    borderColor: "#eadfd3",
-  },
-  calendarSelector: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#f8f1e9",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#eadfd3",
-  },
-  calendarText: {
-    fontSize: 13,
-    color: "#bbb",
-  },
-  calendarTextActive: {
-    color: "#4b3621",
-    fontWeight: "bold",
-  },
-  clearDateBtn: {
-    padding: 4,
-  },
-  quickFilterRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 12,
-    gap: 10,
-  },
-  quickFilterBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#f8f1e9",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#eadfd3",
-  },
-  quickFilterBtnActive: {
-    backgroundColor: "#8d6e63",
-    borderColor: "#8d6e63",
-  },
-  quickFilterText: {
-    fontSize: 12,
-    color: "#8d6e63",
-    fontWeight: "bold",
-  },
-  quickFilterTextActive: {
-    color: "#fff",
-  },
-  filteredStatsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  resultsCount: {
-    fontSize: 12,
-    color: "#8d6e63",
-  },
-  resultsRevenue: {
-    fontSize: 12,
-    color: "#8d6e63",
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  invoiceCard: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#eadfd3",
+    borderColor: "#f1e6da",
+    overflow: "hidden",
     elevation: 2,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 3,
   },
-  invoiceHeader: {
+  shiftCardHeader: {
     flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
     justifyContent: "space-between",
-    alignItems: "flex-start",
   },
-  invoiceTitle: {
-    fontSize: 15,
+  shiftIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  shiftCardTitle: {
+    fontSize: 14,
     fontWeight: "bold",
     color: "#4b3621",
   },
-  staffName: {
+  shiftCardTime: {
+    fontSize: 10,
+    color: "#8d6e63",
+    marginTop: 1,
+  },
+  shiftRevenueText: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#2e7d32",
+    textAlign: "right",
+  },
+  shiftOrdersCountText: {
+    fontSize: 11,
+    color: "#8d6e63",
+    marginTop: 1,
+    textAlign: "right",
+  },
+  shiftCardBody: {
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f5ece3",
+    backgroundColor: "#faf6f0",
+  },
+  shiftEmptyContainer: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  shiftEmptyText: {
+    fontSize: 12,
+    color: "#8d6e63",
+    fontStyle: "italic",
+    textAlign: "center",
+  },
+  shiftInvoiceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#f1e6da",
+  },
+  shiftInvoiceTitle: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#4b3621",
+  },
+  shiftInvoiceTime: {
+    fontSize: 10,
+    color: "#8d6e63",
+    marginLeft: 6,
+  },
+  shiftInvoiceStaff: {
     fontSize: 11,
     color: "#8d6e63",
     marginTop: 4,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+  shiftInvoicePrice: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#2e7d32",
+    textAlign: "right",
+  },
+  // Badges
+  miniBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  miniBadgeText: {
+    fontSize: 9,
+    fontWeight: "bold",
   },
   paidBadge: {
     backgroundColor: "#e8f5e9",
   },
-  unpaidBadge: {
-    backgroundColor: "#fff3e0",
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: "#4b3621",
-  },
-  invoiceDivider: {
-    height: 1,
-    backgroundColor: "#f5ece3",
-    marginVertical: 10,
-  },
-  invoiceFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  invoiceTime: {
-    fontSize: 11,
-    color: "#8d6e63",
-  },
-  viewDetailsText: {
-    fontSize: 11,
-    color: "#8d6e63",
-    fontStyle: "italic",
-    opacity: 0.8,
-  },
-  invoiceTotal: {
-    fontSize: 15,
-    fontWeight: "bold",
+  paidText: {
     color: "#2e7d32",
+  },
+  unpaidBadge: {
+    backgroundColor: "#ffebee",
+  },
+  unpaidText: {
+    color: "#c62828",
   },
   loaderContainer: {
     paddingVertical: 40,
@@ -843,22 +982,7 @@ const styles = StyleSheet.create({
     color: "#8d6e63",
     fontSize: 12,
   },
-  emptyContainer: {
-    paddingVertical: 40,
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#eadfd3",
-  },
-  emptyText: {
-    marginTop: 10,
-    color: "#bbb",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  
-  /* LỊCH CHỌN NGÀY CHUYÊN NGHIỆP */
+  // Calendar picker styles inside modal
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -890,7 +1014,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   calendarTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "bold",
     color: "#4b3621",
   },
@@ -966,19 +1090,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#8d6e63",
   },
-  closeModalBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+  monthNavBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#f5ece3",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  closeModalBtnText: {
-    fontSize: 11,
-    color: "#d32f2f",
-    fontWeight: "bold",
-  },
-
-  /* MODAL CHI TIẾT HÓA ĐƠN */
+  // Detailed bill details modal
   detailsModalContainer: {
     backgroundColor: "#fff",
     borderRadius: 24,
@@ -1008,7 +1128,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   detailsTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "bold",
     color: "#4b3621",
   },
@@ -1043,7 +1163,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   detailsScroll: {
-    maxHeight: 180, // Giới hạn chiều cao danh sách món để tránh tràn màn hình
+    maxHeight: 180,
   },
   detailItemRow: {
     flexDirection: "row",

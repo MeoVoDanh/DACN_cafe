@@ -161,7 +161,6 @@ export default function ProfileScreen({ navigation }) {
             <InfoRow label="Email" value={profile?.Email} />
             <InfoRow label="Số điện thoại" value={profile?.SDT} />
             <InfoRow label="Mã nhân viên" value={profile?.MaNhanVien} />
-            <InfoRow label="Mã tài khoản" value={profile?.MaTaiKhoan} />
           </View>
         </View>
       </ScrollView>

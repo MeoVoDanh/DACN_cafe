@@ -9,9 +9,11 @@ export const getAllHoaDonService = async () => {
       hd.tongtien,
       hd.trangthaithanhtoan,
       hd.MaNhanVien,
-      nv.HoTen
+      nv.HoTen,
+      tt.phuongThuc
     FROM HoaDon hd
     JOIN NhanVien nv ON hd.MaNhanVien = nv.MaNhanVien
+    LEFT JOIN ThanhToan tt ON hd.maHoaDon = tt.maHoaDon
     ORDER BY hd.maHoaDon DESC
   `);
 
