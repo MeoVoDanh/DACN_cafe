@@ -136,6 +136,16 @@ CREATE TABLE ThanhToan (
 ) COMMENT 'Bảng lưu thông tin thanh toán';
 
 -- ==========================================
+-- 5.5 BẢNG DANH MỤC ĐỒ UỐNG
+-- ==========================================
+CREATE TABLE DanhMucDoUong (
+    maDanhMuc INT AUTO_INCREMENT PRIMARY KEY COMMENT 'Khóa chính danh mục',
+    tenDanhMuc VARCHAR(100) NOT NULL UNIQUE COMMENT 'Tên danh mục đồ uống',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) COMMENT 'Bảng lưu thông tin danh mục đồ uống';
+
+-- ==========================================
 -- 6. BẢNG ĐỒ UỐNG
 -- ==========================================
 CREATE TABLE DoUong (
@@ -145,13 +155,18 @@ CREATE TABLE DoUong (
     moTa TEXT NULL COMMENT 'Mô tả đồ uống',
     hinhAnh VARCHAR(255) DEFAULT NULL COMMENT 'Tên file hoặc đường dẫn hình ảnh',
     trangThai VARCHAR(50) DEFAULT 'Đang bán' COMMENT 'Trạng thái kinh doanh',
-    danhMuc VARCHAR(100) DEFAULT 'Khác' COMMENT 'Danh mục đồ uống',
+    maDanhMuc INT NULL COMMENT 'Khóa ngoại liên kết danh mục',
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+    CONSTRAINT fk_douong_danhmuc
+        FOREIGN KEY (maDanhMuc)
+        REFERENCES DanhMucDoUong(maDanhMuc)
+        ON DELETE SET NULL,
+
     CONSTRAINT chk_dongia_duong
         CHECK (donGia >= 0)
-) COMMENT 'Bảng danh mục đồ uống';
+) COMMENT 'Bảng thông tin đồ uống';
 
 -- ==========================================
 -- 7. BẢNG CHI TIẾT HÓA ĐƠN
@@ -229,29 +244,40 @@ INSERT INTO NhanVien (HoTen, Email, SDT, DiaChi, MaTaiKhoan) VALUES
 ('Hồ Tấn Đạt', 'dat.ho@dacncafe.com', '0990123456', 'TP.HCM', 10);
 
 -- ==========================================
+-- 10.5 DỮ LIỆU MẪU DANH MỤC ĐỒ UỐNG
+-- ==========================================
+INSERT INTO DanhMucDoUong (tenDanhMuc) VALUES
+('Cà phê'),
+('Trà'),
+('Trà sữa'),
+('Sinh tố & Nước ép'),
+('Matcha'),
+('Khác');
+
+-- ==========================================
 -- 11. DỮ LIỆU MẪU ĐỒ UỐNG
 -- ==========================================
-INSERT INTO DoUong (tenDoUong, donGia, moTa, hinhAnh, danhMuc) VALUES
-('Cà phê đen đá', 20000, 'Cà phê rang xay nguyên chất pha phin', 'cf_den.jpg', 'Cà phê'),
-('Cà phê sữa đá', 25000, 'Cà phê phin kết hợp sữa đặc', 'cf_sua.jpg', 'Cà phê'),
-('Bạc xỉu', 28000, 'Nhiều sữa ít cà phê', 'bac_xiu.jpg', 'Cà phê'),
-('Cà phê muối', 30000, 'Cà phê kết hợp lớp kem muối', 'cf_muoi.jpg', 'Cà phê'),
-('Espresso', 35000, 'Cà phê pha máy chuẩn Ý', 'espresso.jpg', 'Cà phê'),
-('Americano', 35000, 'Espresso pha loãng với nước', 'americano.jpg', 'Cà phê'),
-('Trà đào cam sả', 40000, 'Trà đào cam sả thanh mát', 'tra_dao.jpg', 'Trà'),
-('Trà sen vàng', 45000, 'Trà oolong, hạt sen và kem macchiato', 'tra_sen_vang.jpg', 'Trà'),
-('Trà vải nhiệt đới', 40000, 'Trà đen kết hợp trái vải', 'tra_vai_nhiet_doi.jpg', 'Trà'),
-('Hồng trà chanh', 30000, 'Hồng trà pha chanh', 'hong_tra_chanh.jpg', 'Trà'),
-('Trà sữa truyền thống', 35000, 'Trà sữa truyền thống với trân châu', 'ts_truyenthong.jpg', 'Trà sữa'),
-('Trà sữa Matcha', 40000, 'Matcha Nhật Bản và sữa tươi', 'ts_matcha.jpg', 'Trà sữa'),
-('Sinh tố bơ', 45000, 'Sinh tố bơ béo ngậy', 'st_bo.jpg', 'Sinh tố & Nước ép'),
-('Sinh tố dâu tây', 45000, 'Sinh tố dâu tây tươi mát', 'st_dau.jpg', 'Sinh tố & Nước ép'),
-('Nước ép dưa hấu', 35000, 'Nước ép dưa hấu nguyên chất', 'ep_duahau.jpg', 'Sinh tố & Nước ép'),
-('Nước ép cam cà rốt', 40000, 'Nước ép cam kết hợp cà rốt', 'ep_camcarot.jpg', 'Sinh tố & Nước ép'),
-('Sữa chua đá xay', 35000, 'Sữa chua đá xay mát lạnh', 'sc_da.jpg', 'Khác'),
-('Cacao nóng', 35000, 'Cacao nguyên chất pha nóng', 'cacao.jpg', 'Khác'),
-('Matcha đá xay', 50000, 'Matcha đá xay kèm whipping cream', 'matcha_blended.jpg', 'Matcha'),
-('Mocha đá xay', 50000, 'Cafe, socola và đá xay', 'mocha_blended.jpg', 'Cà phê');
+INSERT INTO DoUong (tenDoUong, donGia, moTa, hinhAnh, maDanhMuc) VALUES
+('Cà phê đen đá', 20000, 'Cà phê rang xay nguyên chất pha phin', 'cf_den.jpg', 1),
+('Cà phê sữa đá', 25000, 'Cà phê phin kết hợp sữa đặc', 'cf_sua.jpg', 1),
+('Bạc xỉu', 28000, 'Nhiều sữa ít cà phê', 'bac_xiu.jpg', 1),
+('Cà phê muối', 30000, 'Cà phê kết hợp lớp kem muối', 'cf_muoi.jpg', 1),
+('Espresso', 35000, 'Cà phê pha máy chuẩn Ý', 'espresso.jpg', 1),
+('Americano', 35000, 'Espresso pha loãng với nước', 'americano.jpg', 1),
+('Trà đào cam sả', 40000, 'Trà đào cam sả thanh mát', 'tra_dao.jpg', 2),
+('Trà sen vàng', 45000, 'Trà oolong, hạt sen và kem macchiato', 'tra_sen_vang.jpg', 2),
+('Trà vải nhiệt đới', 40000, 'Trà đen kết hợp trái vải', 'tra_vai_nhiet_doi.jpg', 2),
+('Hồng trà chanh', 30000, 'Hồng trà pha chanh', 'hong_tra_chanh.jpg', 2),
+('Trà sữa truyền thống', 35000, 'Trà sữa truyền thống với trân châu', 'ts_truyenthong.jpg', 3),
+('Trà sữa Matcha', 40000, 'Matcha Nhật Bản và sữa tươi', 'ts_matcha.jpg', 3),
+('Sinh tố bơ', 45000, 'Sinh tố bơ béo ngậy', 'st_bo.jpg', 4),
+('Sinh tố dâu tây', 45000, 'Sinh tố dâu tây tươi mát', 'st_dau.jpg', 4),
+('Nước ép dưa hấu', 35000, 'Nước ép dưa hấu nguyên chất', 'ep_duahau.jpg', 4),
+('Nước ép cam cà rốt', 40000, 'Nước ép cam kết hợp cà rốt', 'ep_camcarot.jpg', 4),
+('Sữa chua đá xay', 35000, 'Sữa chua đá xay mát lạnh', 'sc_da.jpg', 6),
+('Cacao nóng', 35000, 'Cacao nguyên chất pha nóng', 'cacao.jpg', 6),
+('Matcha đá xay', 50000, 'Matcha đá xay kèm whipping cream', 'matcha_blended.jpg', 5),
+('Mocha đá xay', 50000, 'Cafe, socola và đá xay', 'mocha_blended.jpg', 1);
 
 -- ==========================================
 -- 12. DỮ LIỆU MẪU CA LÀM
