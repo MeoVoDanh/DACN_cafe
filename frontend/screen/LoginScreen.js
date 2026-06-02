@@ -8,10 +8,15 @@ import {
   ImageBackground,
   ActivityIndicator,
   ScrollView,
+  useWindowDimensions,
+  Image,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser, clearError } from "../redux/authSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
+
+const bgWeb = require("../assets/coffee-bg-web.png");
+const bgMobile = require("../assets/coffee-bg-mobile.png");
 
 export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState("");
@@ -20,6 +25,9 @@ export default function LoginScreen({ navigation }) {
   const dispatch = useDispatch();
 
   const { isLoading, error, user } = useSelector((state) => state.auth);
+
+  const { width } = useWindowDimensions();
+  const backgroundImage = width > 768 ? bgWeb : bgMobile;
 
   useEffect(() => {
     if (error) {
@@ -53,7 +61,7 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <ImageBackground
-      source={require("../assets/coffee-bg.png")}
+      source={backgroundImage}
       style={styles.container}
       resizeMode="cover"
     >
@@ -62,9 +70,11 @@ export default function LoginScreen({ navigation }) {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.card}>
-          <View style={styles.logoCircle}>
-            <FontAwesome5 name="store" size={24} color="#fff" />
-          </View>
+          <Image
+            source={require("../assets/logo.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
 
           <Text style={styles.brand}>O’Leon Cat Coffee</Text>
           <Text style={styles.subTitle}>HỆ THỐNG ĐĂNG NHẬP NỘI BỘ</Text>
@@ -170,15 +180,15 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
 
-  logoCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#4b3621",
-    justifyContent: "center",
-    alignItems: "center",
+  logoImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
     alignSelf: "center",
     marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: "#4b3621",
+    backgroundColor: "#fff",
   },
 
   brand: {

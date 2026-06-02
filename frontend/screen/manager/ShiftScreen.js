@@ -12,6 +12,7 @@ import {
   Modal,
   TextInput,
   FlatList,
+  StatusBar,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useSelector, useDispatch } from "react-redux";
@@ -277,6 +278,11 @@ export default function ShiftScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="transparent"
+        translucent
+      />
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -563,6 +569,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 12 : 16,
     height: Platform.OS === "web" ? "100vh" : "100%",
     maxHeight: Platform.OS === "web" ? "100vh" : "100%",
     overflow: "hidden",
@@ -806,7 +813,7 @@ const styles = StyleSheet.create({
   modalContent: {
     width: "100%",
     maxWidth: 400,
-    maxHeight: 500,
+    height: 450, // Định nghĩa chiều cao cụ thể giúp FlatList flex: 1 hoạt động chính xác không bị co cụm về 0
     backgroundColor: "#fff8f0",
     borderRadius: 20,
     padding: 16,

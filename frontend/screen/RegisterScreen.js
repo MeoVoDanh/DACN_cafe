@@ -10,12 +10,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  useWindowDimensions,
+  Image,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 
-const backgroundImage = require("../assets/coffee-bg.png");
+const bgWeb = require("../assets/coffee-bg-web.png");
+const bgMobile = require("../assets/coffee-bg-mobile.png");
 
 export default function RegisterScreen({ onRegister, onSwitchToLogin }) {
+  const { width } = useWindowDimensions();
+  const backgroundImage = width > 768 ? bgWeb : bgMobile;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -49,9 +54,11 @@ export default function RegisterScreen({ onRegister, onSwitchToLogin }) {
               style={styles.keyboardView}
             >
               <View style={styles.box}>
-                <View style={styles.logoCircle}>
-                  <FontAwesome5 name="user-plus" size={32} color="#4b3621" />
-                </View>
+                <Image
+                  source={require("../assets/logo.png")}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
                 <Text style={styles.title}>TẠO TÀI KHOẢN</Text>
                 <View style={styles.form}>
                   <View style={styles.inputWrapper}>
@@ -144,16 +151,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     elevation: 10,
   },
-  logoCircle: {
-    width: 85,
-    height: 85,
-    borderRadius: 43,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
+  logoImage: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    alignSelf: "center",
     marginBottom: 25,
     borderWidth: 1.5,
     borderColor: "#4b3621",
+    backgroundColor: "#fff",
   },
   title: {
     fontSize: 26,

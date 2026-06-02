@@ -12,6 +12,7 @@ import {
   Modal,
   FlatList,
   RefreshControl,
+  useWindowDimensions,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useDispatch, useSelector } from "react-redux";
@@ -20,9 +21,12 @@ import { logout } from "../../redux/authSlice";
 import { fetchNotifications, markAllNotificationsRead } from "../../redux/profileSlice";
 import api from "../../redux/api"; // Import api để lấy cấu hình đường dẫn ảnh
 
-const backgroundImage = require("../../assets/coffee-bg.png");
+const bgWeb = require("../../assets/coffee-bg-web.png");
+const bgMobile = require("../../assets/coffee-bg-mobile.png");
 
 export default function EmployeeDashboardScreen({ navigation }) {
+  const { width } = useWindowDimensions();
+  const backgroundImage = width > 768 ? bgWeb : bgMobile;
   const dispatch = useDispatch();
 
   const { user } = useSelector((state) => state.auth);

@@ -8,14 +8,19 @@ import {
   ImageBackground,
   StatusBar,
   ScrollView,
+  useWindowDimensions,
+  Image,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useDispatch } from "react-redux";
 import { logout } from "../../redux/authSlice";
 
-const backgroundImage = require("../../assets/coffee-bg.png");
+const bgWeb = require("../../assets/coffee-bg-web.png");
+const bgMobile = require("../../assets/coffee-bg-mobile.png");
 
 export default function DashboardScreen({ navigation }) {
+  const { width } = useWindowDimensions();
+  const backgroundImage = width > 768 ? bgWeb : bgMobile;
   const dispatch = useDispatch();
 
   const handleLogout = () => {
@@ -45,7 +50,11 @@ export default function DashboardScreen({ navigation }) {
               {/* Logo và Tiêu đề bên trái */}
               <View style={styles.headerContent}>
                 <View style={styles.iconCircle}>
-                  <FontAwesome5 name="coffee" size={24} color="#4b3621" />
+                  <Image
+                    source={require("../../assets/logo.png")}
+                    style={styles.logoIcon}
+                    resizeMode="contain"
+                  />
                 </View>
                 <View style={styles.headerTextGroup}>
                   <Text style={styles.title}>O’Leon Cat Coffee</Text>
@@ -157,9 +166,15 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "rgba(255, 248, 240, 0.9)",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  },
+  logoIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   title: { fontSize: 18, fontWeight: "bold", color: "#fff", letterSpacing: 2 },
   subtitle: {
