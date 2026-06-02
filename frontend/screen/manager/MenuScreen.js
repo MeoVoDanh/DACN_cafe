@@ -22,6 +22,10 @@ import {
   fetchDrinks,
   updateDrink,
   clearMenuMessage,
+  fetchCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 } from "../../redux/menuSlice";
 import * as ImagePicker from "expo-image-picker";
 import { FontAwesome5 } from "@expo/vector-icons";
@@ -35,44 +39,26 @@ export default function MenuScreen({ navigation }) {
 
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
   const [searchQuery, setSearchQuery] = useState("");
-  const [createdCategories, setCreatedCategories] = useState([]);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [renamingCategory, setRenamingCategory] = useState(null);
 
-  const { drinks, isLoading, error, message } = useSelector(
+  const { drinks, categories: dbCategoriesRaw, isLoading, error, message } = useSelector(
     (state) => state.menu,
   );
 
-  useEffect(() => {
-    const loadCustomCategories = async () => {
-      try {
-        const stored = await AsyncStorage.getItem("custom_categories");
-        if (stored) {
-          setCreatedCategories(JSON.parse(stored));
-        }
-      } catch (err) {
-        console.log("Failed to load custom categories:", err);
-      }
-    };
-    loadCustomCategories();
-  }, []);
-
   const CATEGORIES = useMemo(() => {
     const dbCategories = Array.from(
-      new Set(drinks.filter((d) => d.danhMuc).map((d) => d.danhMuc))
+      new Set(dbCategoriesRaw.map((c) => c.tenDanhMuc))
     );
-    const combined = Array.from(new Set([...dbCategories, ...createdCategories]));
-    return ["Tất cả", ...combined];
-  }, [drinks, createdCategories]);
+    return ["Tất cả", ...dbCategories];
+  }, [dbCategoriesRaw]);
 
   const quickCategories = useMemo(() => {
-    const dbCategories = Array.from(
-      new Set(drinks.filter((d) => d.danhMuc).map((d) => d.danhMuc))
+    return Array.from(
+      new Set(dbCategoriesRaw.map((c) => c.tenDanhMuc))
     );
-    const standards = ["Cà phê", "Trà", "Trà sữa", "Sinh tố & Nước ép", "Matcha", "Khác"];
-    return Array.from(new Set([...standards, ...dbCategories, ...createdCategories]));
-  }, [drinks, createdCategories]);
+  }, [dbCategoriesRaw]);
 
   const searchedDrinks = useMemo(() => {
     if (!searchQuery.trim()) return drinks;
@@ -93,6 +79,7 @@ export default function MenuScreen({ navigation }) {
 
   useEffect(() => {
     dispatch(fetchDrinks());
+    dispatch(fetchCategories());
   }, [dispatch]);
 
   useEffect(() => {
@@ -136,13 +123,8 @@ export default function MenuScreen({ navigation }) {
       return;
     }
 
-    const updated = [...createdCategories, trimmed];
-    setCreatedCategories(updated);
-    try {
-      await AsyncStorage.setItem("custom_categories", JSON.stringify(updated));
-    } catch (err) {
-      console.log(err);
-    }
+    await dispatch(createCategory({ tenDanhMuc: trimmed }));
+    dispatch(fetchCategories());
     
     setNewCategoryName("");
     setCategoryModalVisible(false);
@@ -186,34 +168,11 @@ export default function MenuScreen({ navigation }) {
       return;
     }
 
-    const updatedCreated = createdCategories.map(c => c === oldName ? newName : c);
-    setCreatedCategories(updatedCreated);
-    await AsyncStorage.setItem("custom_categories", JSON.stringify(updatedCreated));
-
-    const drinksToUpdate = drinks.filter(d => d.danhMuc === oldName);
-    if (drinksToUpdate.length > 0) {
-      try {
-        await Promise.all(
-          drinksToUpdate.map(drink =>
-            dispatch(
-              updateDrink({
-                maDoUong: drink.maDoUong,
-                data: {
-                  tenDoUong: drink.tenDoUong,
-                  donGia: drink.donGia,
-                  moTa: drink.moTa,
-                  hinhAnh: drink.hinhAnh,
-                  trangThai: drink.trangThai,
-                  danhMuc: newName,
-                },
-              })
-            )
-          )
-        );
-        dispatch(fetchDrinks());
-      } catch (err) {
-        console.log("Failed to update drinks category in database:", err);
-      }
+    const catObj = dbCategoriesRaw.find(c => c.tenDanhMuc === oldName);
+    if (catObj) {
+      await dispatch(updateCategory({ maDanhMuc: catObj.maDanhMuc, data: { tenDanhMuc: newName } }));
+      dispatch(fetchDrinks());
+      dispatch(fetchCategories());
     }
 
     if (Platform.OS === "web") {
@@ -246,34 +205,11 @@ export default function MenuScreen({ navigation }) {
     const accepted = await confirmDelete();
     if (!accepted) return;
 
-    const updatedCreated = createdCategories.filter(c => c !== catName);
-    setCreatedCategories(updatedCreated);
-    await AsyncStorage.setItem("custom_categories", JSON.stringify(updatedCreated));
-
-    const drinksToUpdate = drinks.filter(d => d.danhMuc === catName);
-    if (drinksToUpdate.length > 0) {
-      try {
-        await Promise.all(
-          drinksToUpdate.map(drink =>
-            dispatch(
-              updateDrink({
-                maDoUong: drink.maDoUong,
-                data: {
-                  tenDoUong: drink.tenDoUong,
-                  donGia: drink.donGia,
-                  moTa: drink.moTa,
-                  hinhAnh: drink.hinhAnh,
-                  trangThai: drink.trangThai,
-                  danhMuc: "Khác",
-                },
-              })
-            )
-          )
-        );
-        dispatch(fetchDrinks());
-      } catch (err) {
-        console.log("Failed to re-assign drinks category to Khác:", err);
-      }
+    const catObj = dbCategoriesRaw.find(c => c.tenDanhMuc === catName);
+    if (catObj) {
+      await dispatch(deleteCategory(catObj.maDanhMuc));
+      dispatch(fetchDrinks());
+      dispatch(fetchCategories());
     }
 
     if (selectedCategory === catName) {
@@ -536,10 +472,9 @@ export default function MenuScreen({ navigation }) {
     const catDrinks = searchedDrinks.filter((d) => d.danhMuc === catName);
     
     // Nếu danh mục trống và không phải là danh mục do người dùng tạo thủ công, ẩn nó đi
-    const isCustom = createdCategories.includes(catName);
-    if (catDrinks.length === 0 && !isCustom) return null;
-
     const isSystemDefault = ["Tất cả", "Khác", "Cà phê", "Trà", "Trà sữa", "Sinh tố & Nước ép", "Matcha"].includes(catName);
+    const isCustom = !isSystemDefault;
+    if (catDrinks.length === 0 && !isCustom) return null;
 
     return (
       <View key={catName} style={styles.categorySection}>

@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import douongRoutes from "./routes/douong.js";
+import danhmucRoutes from "./routes/danhmuc.js";
 import nhanvienRoutes from "./routes/nhanvien.js";
 import calamRoutes from "./routes/calam.js";
 import hoadonRoutes from "./routes/hoadon.js";
@@ -30,6 +31,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/douong", douongRoutes);
+app.use("/api/danhmuc", danhmucRoutes);
 app.use("/api/nhanvien", nhanvienRoutes);
 app.use("/api/calam", calamRoutes);
 app.use("/api/hoadon", hoadonRoutes);
