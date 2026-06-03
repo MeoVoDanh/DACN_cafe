@@ -29,17 +29,15 @@ export const fetchInvoices = createAsyncThunk(
 
 export const fetchDrinksForInvoice = createAsyncThunk(
   "invoice/fetchDrinksForInvoice",
-  async (_, thunkAPI) => {
+  async (_, { rejectWithValue }) => {
     try {
       const response = await api.get("/douong");
-      return response.data;
-    } catch (error) {
-      const message =
-        error.response?.data?.message ||
-        error.message ||
-        "Không lấy được danh sách đồ uống";
 
-      return thunkAPI.rejectWithValue(message);
+      return response.data.data || [];
+    } catch (error) {
+      return rejectWithValue(
+        error.response?.data?.message || "Lỗi lấy danh sách đồ uống",
+      );
     }
   },
 );
@@ -145,11 +143,12 @@ const invoiceSlice = createSlice({
       })
       .addCase(fetchDrinksForInvoice.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.drinks = action.payload;
+        state.drinks = Array.isArray(action.payload) ? action.payload : [];
       })
       .addCase(fetchDrinksForInvoice.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload;
+        state.error = action.payload || "Lỗi lấy danh sách đồ uống";
+        state.drinks = [];
       })
 
       .addCase(createInvoice.pending, (state) => {
