@@ -8,14 +8,17 @@ import {
 
 export const getAllDoUong = async (req, res) => {
   try {
-    const result = await getAllDoUongService();
+    const data = await getAllDoUongService();
 
-    return res.status(result.statusCode).json(result.data);
+    return res.status(200).json({
+      message: "Lấy danh sách đồ uống thành công",
+      data,
+    });
   } catch (error) {
-    console.error("[douongController.getAllDoUong Error]:", error);
-    return res.status(500).json({
-      message: "Lỗi lấy danh sách đồ uống",
-      error: error.message,
+    console.log("[douongController.getAllDoUong Error]:", error);
+
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Lỗi lấy danh sách đồ uống",
     });
   }
 };

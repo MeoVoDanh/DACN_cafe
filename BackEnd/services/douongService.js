@@ -1,67 +1,131 @@
 import db from "../config/db.js";
-
+import pool from "../config/db.js";
 const resolveDanhMucId = async (danhMucInput) => {
   if (!danhMucInput) {
-    const [rows] = await db.query("SELECT maDanhMuc FROM DanhMucDoUong WHERE tenDanhMuc = 'Khác'");
-    if (rows.length > 0) return rows[0].maDanhMuc;
+    try {
+      const [rows] = await db.query(
+        "SELECT maDanhMuc FROM DanhMucDoUong WHERE tenDanhMuc = 'Khác'",
+      );
+      if (rows.length > 0) return rows[0].maDanhMuc;
+    } catch (error) {
+      if (error.code === "ER_NO_SUCH_TABLE") {
+        return null;
+      }
+      throw error;
+    }
     return null;
   }
 
-  if (typeof danhMucInput === 'number' || !isNaN(Number(danhMucInput))) {
-    const [rows] = await db.query("SELECT maDanhMuc FROM DanhMucDoUong WHERE maDanhMuc = ?", [Number(danhMucInput)]);
-    if (rows.length > 0) return rows[0].maDanhMuc;
+  if (typeof danhMucInput === "number" || !isNaN(Number(danhMucInput))) {
+    try {
+      const [rows] = await db.query(
+        "SELECT maDanhMuc FROM DanhMucDoUong WHERE maDanhMuc = ?",
+        [Number(danhMucInput)],
+      );
+      if (rows.length > 0) return rows[0].maDanhMuc;
+    } catch (error) {
+      if (error.code === "ER_NO_SUCH_TABLE") {
+        return null;
+      }
+      throw error;
+    }
   }
 
   const categoryName = String(danhMucInput).trim();
-  const [rows] = await db.query("SELECT maDanhMuc FROM DanhMucDoUong WHERE tenDanhMuc = ?", [categoryName]);
-  if (rows.length > 0) {
-    return rows[0].maDanhMuc;
-  }
+  try {
+    const [rows] = await db.query(
+      "SELECT maDanhMuc FROM DanhMucDoUong WHERE tenDanhMuc = ?",
+      [categoryName],
+    );
+    if (rows.length > 0) {
+      return rows[0].maDanhMuc;
+    }
 
-  const [result] = await db.query("INSERT INTO DanhMucDoUong (tenDanhMuc) VALUES (?)", [categoryName]);
-  return result.insertId;
+    const [result] = await db.query(
+      "INSERT INTO DanhMucDoUong (tenDanhMuc) VALUES (?)",
+      [categoryName],
+    );
+    return result.insertId;
+  } catch (error) {
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      return null;
+    }
+    throw error;
+  }
 };
 
 export const getAllDoUongService = async () => {
-  const [rows] = await db.query(`
-    SELECT 
-      du.maDoUong,
-      du.tenDoUong,
-      du.donGia,
-      du.moTa,
-      du.hinhAnh,
-      du.trangThai,
-      COALESCE(dm.tenDanhMuc, 'Khác') AS danhMuc,
-      du.maDanhMuc
-    FROM DoUong du
-    LEFT JOIN DanhMucDoUong dm ON du.maDanhMuc = dm.maDanhMuc
-    ORDER BY du.maDoUong DESC
-  `);
+  try {
+    const [rows] = await db.query(`
+      SELECT 
+        du.maDoUong,
+        du.tenDoUong,
+        du.donGia,
+        du.moTa,
+        du.hinhAnh,
+        du.trangThai,
+        du.danhMuc
+      FROM DoUong du
+      ORDER BY du.maDoUong DESC
+    `);
 
-  return {
-    statusCode: 200,
-    data: rows,
-  };
+    return rows;
+  } catch (error) {
+    throw error;
+  }
 };
 
 export const getDoUongByIdService = async (maDoUong) => {
-  const [rows] = await db.query(
-    `
-    SELECT 
-      du.maDoUong,
-      du.tenDoUong,
-      du.donGia,
-      du.moTa,
-      du.hinhAnh,
-      du.trangThai,
-      COALESCE(dm.tenDanhMuc, 'Khác') AS danhMuc,
-      du.maDanhMuc
-    FROM DoUong du
-    LEFT JOIN DanhMucDoUong dm ON du.maDanhMuc = dm.maDanhMuc
-    WHERE du.maDoUong = ?
-    `,
-    [maDoUong],
-  );
+  let rows = [];
+
+  try {
+    const [result] = await db.query(
+      `
+      SELECT 
+        du.maDoUong,
+        du.tenDoUong,
+        du.donGia,
+        du.moTa,
+        du.hinhAnh,
+        du.trangThai,
+        COALESCE(dm.tenDanhMuc, 'Khác') AS danhMuc,
+        du.maDanhMuc
+      FROM DoUong du
+      LEFT JOIN DanhMucDoUong dm ON du.maDanhMuc = dm.maDanhMuc
+      WHERE du.maDoUong = ?
+      `,
+      [maDoUong],
+    );
+    rows = result;
+  } catch (error) {
+    const missingCategoryTable =
+      error.code === "ER_NO_SUCH_TABLE" &&
+      String(error.sqlMessage || "")
+        .toLowerCase()
+        .includes("danhmucdouong");
+
+    if (!missingCategoryTable) {
+      throw error;
+    }
+
+    const [fallbackRows] = await db.query(
+      `
+      SELECT 
+        du.maDoUong,
+        du.tenDoUong,
+        du.donGia,
+        du.moTa,
+        du.hinhAnh,
+        du.trangThai,
+        'Khác' AS danhMuc,
+        du.maDanhMuc
+      FROM DoUong du
+      WHERE du.maDoUong = ?
+      `,
+      [maDoUong],
+    );
+    rows = fallbackRows;
+  }
 
   if (rows.length === 0) {
     return {
@@ -87,7 +151,14 @@ export const createDoUongService = async (data) => {
     INSERT INTO DoUong (tenDoUong, donGia, moTa, hinhAnh, trangThai, maDanhMuc)
     VALUES (?, ?, ?, ?, ?, ?)
     `,
-    [tenDoUong, donGia, moTa || null, hinhAnh || null, trangThai || "Đang bán", maDanhMuc],
+    [
+      tenDoUong,
+      donGia,
+      moTa || null,
+      hinhAnh || null,
+      trangThai || "Đang bán",
+      maDanhMuc,
+    ],
   );
 
   return {
@@ -109,7 +180,15 @@ export const updateDoUongService = async (maDoUong, data) => {
     SET tenDoUong = ?, donGia = ?, moTa = ?, hinhAnh = ?, trangThai = ?, maDanhMuc = ?
     WHERE maDoUong = ?
     `,
-    [tenDoUong, donGia, moTa || null, hinhAnh || null, trangThai || "Đang bán", maDanhMuc, maDoUong],
+    [
+      tenDoUong,
+      donGia,
+      moTa || null,
+      hinhAnh || null,
+      trangThai || "Đang bán",
+      maDanhMuc,
+      maDoUong,
+    ],
   );
 
   if (result.affectedRows === 0) {

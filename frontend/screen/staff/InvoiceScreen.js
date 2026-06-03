@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,10 @@ import {
   Platform,
   TextInput,
   Image,
+  Linking,
 } from "react-native";
+import QRCodeLib from "qrcode";
+import QRCodeSvg from "react-native-qrcode-svg";
 import { useDispatch, useSelector } from "react-redux";
 import {
   createInvoice,
@@ -26,33 +29,39 @@ import {
 } from "../../redux/invoiceSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 import api from "../../redux/api";
-
-
+import {
+  createPayosPayment,
+  getPayosPaymentStatus,
+} from "../../services/payosService";
 
 export default function InvoiceScreen({ navigation }) {
   const dispatch = useDispatch();
   const BASE_URL = api.defaults.baseURL.replace("/api", "");
-
   const { invoices, drinks, isLoading, error, message } = useSelector(
     (state) => state.invoice,
   );
+  const safeDrinks = Array.isArray(drinks) ? drinks : [];
 
-  // Dynamically compute categories from drinks database records
-  const uniqueCategories = Array.from(new Set(
-    drinks
-      .filter((d) => d.trangThai !== "Dừng bán" && d.danhMuc)
-      .map((d) => d.danhMuc)
-  ));
-  
-  const CATEGORIES = [
-    { id: "all", name: "Tất cả" },
-    ...uniqueCategories.map((cat) => ({ id: cat, name: cat }))
-  ];
-
-  const getCategoryForDrink = (drink) => {
-    return drink.danhMuc || "Khác";
+  const isDrinkActive = (drink) => {
+    return !["Dừng bán", "NgungBan", "Ngừng bán"].includes(drink?.trangThai);
   };
 
+  const getDrinkCategory = (drink) => {
+    return drink?.danhMuc || "Khác";
+  };
+
+  const uniqueCategories = Array.from(
+    new Set(
+      safeDrinks
+        .filter((d) => isDrinkActive(d))
+        .map((d) => getDrinkCategory(d)),
+    ),
+  );
+
+  const CATEGORIES = [
+    { id: "all", name: "Tất cả" },
+    ...uniqueCategories.map((cat) => ({ id: cat, name: cat })),
+  ];
   const [modalVisible, setModalVisible] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,14 +72,19 @@ export default function InvoiceScreen({ navigation }) {
   const [customizingDrink, setCustomizingDrink] = useState(null);
   const [selectedDuong, setSelectedDuong] = useState("100%");
   const [selectedDa, setSelectedDa] = useState("100%");
-  
+
   // Payment States
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedPaymentInvoice, setSelectedPaymentInvoice] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("tienmat");
   const [customerCash, setCustomerCash] = useState("");
   const [changeDue, setChangeDue] = useState(0);
-
+  const [isCreatingPayos, setIsCreatingPayos] = useState(false);
+  const [payosQrImage, setPayosQrImage] = useState("");
+  const [payosQrValue, setPayosQrValue] = useState("");
+  const [payosCheckoutUrl, setPayosCheckoutUrl] = useState("");
+  const [payosOrderCode, setPayosOrderCode] = useState(null);
+  const payosPollingRef = useRef(null);
   useEffect(() => {
     dispatch(fetchInvoices());
     dispatch(fetchDrinksForInvoice());
@@ -79,7 +93,7 @@ export default function InvoiceScreen({ navigation }) {
   useEffect(() => {
     if (error) {
       Alert.alert("Lỗi", error, [
-        { text: "OK", onPress: () => dispatch(clearInvoiceMessage()) }
+        { text: "OK", onPress: () => dispatch(clearInvoiceMessage()) },
       ]);
     }
   }, [error, dispatch]);
@@ -87,7 +101,7 @@ export default function InvoiceScreen({ navigation }) {
   useEffect(() => {
     if (message) {
       Alert.alert("Thông báo", message, [
-        { text: "OK", onPress: () => dispatch(clearInvoiceMessage()) }
+        { text: "OK", onPress: () => dispatch(clearInvoiceMessage()) },
       ]);
     }
   }, [message, dispatch]);
@@ -98,6 +112,15 @@ export default function InvoiceScreen({ navigation }) {
       dispatch(clearInvoiceMessage());
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    if (!paymentModalVisible) {
+      if (payosPollingRef.current) {
+        clearInterval(payosPollingRef.current);
+        payosPollingRef.current = null;
+      }
+    }
+  }, [paymentModalVisible]);
 
   const reloadData = () => {
     dispatch(fetchInvoices());
@@ -112,7 +135,7 @@ export default function InvoiceScreen({ navigation }) {
       (item) =>
         item.maDoUong === drink.maDoUong &&
         item.duong === itemDuong &&
-        item.da === itemDa
+        item.da === itemDa,
     );
 
     if (existed) {
@@ -122,8 +145,8 @@ export default function InvoiceScreen({ navigation }) {
           item.duong === itemDuong &&
           item.da === itemDa
             ? { ...item, soluong: item.soluong + 1 }
-            : item
-        )
+            : item,
+        ),
       );
     } else {
       setCartItems((prev) => [
@@ -153,9 +176,9 @@ export default function InvoiceScreen({ navigation }) {
         .map((item) =>
           item.maDoUong === maDoUong && item.duong === duong && item.da === da
             ? { ...item, soluong: item.soluong - 1 }
-            : item
+            : item,
         )
-        .filter((item) => item.soluong > 0)
+        .filter((item) => item.soluong > 0),
     );
   };
 
@@ -196,13 +219,20 @@ export default function InvoiceScreen({ navigation }) {
     setPaymentMethod("tienmat");
     setCustomerCash("");
     setChangeDue(0);
+
+    setPayosQrImage("");
+    setPayosQrValue("");
+    setPayosCheckoutUrl("");
+    setPayosOrderCode(null);
+
     setPaymentModalVisible(true);
   };
-
   const handleCashChange = (text, total) => {
     const cleanText = text.replace(/[^0-9]/g, "");
     setCustomerCash(cleanText);
+
     const amount = parseFloat(cleanText) || 0;
+
     if (amount >= total) {
       setChangeDue(amount - total);
     } else {
@@ -219,7 +249,6 @@ export default function InvoiceScreen({ navigation }) {
       setChangeDue(0);
     }
   };
-
   const executePayment = async () => {
     if (!selectedPaymentInvoice) return;
     const maHoaDon = selectedPaymentInvoice.maHoaDon;
@@ -228,15 +257,109 @@ export default function InvoiceScreen({ navigation }) {
     if (payInvoice.fulfilled.match(result)) {
       setPaymentModalVisible(false);
       reloadData();
-      
+
       if (paymentMethod === "tienmat") {
-        const cashVal = customerCash || selectedPaymentInvoice.tongtien.toString();
+        const cashVal =
+          customerCash || selectedPaymentInvoice.tongtien.toString();
         const changeVal = changeDue;
         handlePrintBill(maHoaDon, cashVal, changeVal);
       }
     }
   };
+  const handleCreatePayosQr = async () => {
+    if (!selectedPaymentInvoice) return;
 
+    try {
+      setIsCreatingPayos(true);
+
+      const maHoaDon = selectedPaymentInvoice.maHoaDon;
+      const data = await createPayosPayment(maHoaDon);
+
+      console.log("payOS payment data:", data);
+
+      /**
+       * payOS thường trả về:
+       * - qrCode: chuỗi QR thanh toán
+       * - checkoutUrl: link trang thanh toán
+       */
+      const qrValue = data.qrCode || data.checkoutUrl;
+
+      if (!qrValue) {
+        throw new Error("Backend không trả về qrCode hoặc checkoutUrl");
+      }
+
+      setPayosQrValue(qrValue);
+
+      if (Platform.OS === "web") {
+        const qrImage = await QRCodeLib.toDataURL(qrValue, {
+          width: 280,
+          margin: 2,
+        });
+        setPayosQrImage(qrImage);
+      } else {
+        setPayosQrImage("");
+      }
+      setPayosCheckoutUrl(data.checkoutUrl || "");
+      setPayosOrderCode(data.orderCode || null);
+
+      if (payosPollingRef.current) {
+        clearInterval(payosPollingRef.current);
+        payosPollingRef.current = null;
+      }
+
+      let attempts = 0;
+      payosPollingRef.current = setInterval(async () => {
+        attempts += 1;
+        if (attempts > 120) {
+          clearInterval(payosPollingRef.current);
+          payosPollingRef.current = null;
+          return;
+        }
+
+        try {
+          const statusResult = await getPayosPaymentStatus(maHoaDon);
+          const status = statusResult?.hoaDon?.trangthaithanhtoan;
+
+          if (status === "Đã thanh toán") {
+            clearInterval(payosPollingRef.current);
+            payosPollingRef.current = null;
+
+            setPaymentModalVisible(false);
+            setPayosQrImage("");
+            setPayosQrValue("");
+            setPayosCheckoutUrl("");
+            setPayosOrderCode(null);
+
+            reloadData();
+            Alert.alert("Thông báo", "Thanh toán payOS thành công");
+          }
+        } catch (statusError) {
+          console.log(
+            "Lỗi kiểm tra trạng thái payOS:",
+            statusError?.message || statusError,
+          );
+        }
+      }, 3000);
+    } catch (error) {
+      console.log("===== LỖI PAYOS =====");
+      console.log("Status:", error.response?.status);
+      console.log("Data:", error.response?.data);
+      console.log("Message:", error.message);
+
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Không tạo được mã QR payOS";
+
+      if (Platform.OS === "web") {
+        window.alert(errorMessage);
+      } else {
+        Alert.alert("Lỗi", errorMessage);
+      }
+    } finally {
+      setIsCreatingPayos(false);
+    }
+  };
   const handlePrintBill = async (maHoaDon, cashVal, changeVal) => {
     try {
       const response = await api.get(`/hoadon/${maHoaDon}`);
@@ -248,7 +371,7 @@ export default function InvoiceScreen({ navigation }) {
         }
         return;
       }
-      
+
       const { hoaDon, chiTiet } = response.data;
       const ngayLapStr = formatDate(hoaDon.createdAt || hoaDon.ngaylap);
       const nhanVien = hoaDon.HoTen || "Không rõ";
@@ -257,11 +380,15 @@ export default function InvoiceScreen({ navigation }) {
       if (Platform.OS === "web") {
         const printWindow = window.open("", "_blank");
         if (!printWindow) {
-          window.alert("Trình duyệt đã chặn cửa sổ bật lên. Vui lòng cho phép bật lên để in hóa đơn.");
+          window.alert(
+            "Trình duyệt đã chặn cửa sổ bật lên. Vui lòng cho phép bật lên để in hóa đơn.",
+          );
           return;
         }
 
-        const itemsHtml = chiTiet.map(item => `
+        const itemsHtml = chiTiet
+          .map(
+            (item) => `
           <tr>
             <td style="padding: 6px 0; text-align: left; vertical-align: top;">
               <strong>${item.tenDoUong}</strong><br/>
@@ -271,9 +398,12 @@ export default function InvoiceScreen({ navigation }) {
             <td style="padding: 6px 0; text-align: right; vertical-align: top;">${Number(item.dongia).toLocaleString("vi-VN")}đ</td>
             <td style="padding: 6px 0; text-align: right; vertical-align: top;">${Number(item.thanhtien).toLocaleString("vi-VN")}đ</td>
           </tr>
-        `).join("");
+        `,
+          )
+          .join("");
 
-        const cashInfoHtml = cashVal ? `
+        const cashInfoHtml = cashVal
+          ? `
           <div style="border-top: 1px dashed #000; padding: 10px 0; font-size: 13px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <span>Tiền khách đưa:</span>
@@ -284,7 +414,8 @@ export default function InvoiceScreen({ navigation }) {
               <span><strong>${Number(changeVal).toLocaleString("vi-VN")}đ</strong></span>
             </div>
           </div>
-        ` : "";
+        `
+          : "";
 
         const htmlContent = `
           <html>
@@ -410,12 +541,15 @@ export default function InvoiceScreen({ navigation }) {
           </body>
           </html>
         `;
-        
+
         printWindow.document.open();
         printWindow.document.write(htmlContent);
         printWindow.document.close();
       } else {
-        Alert.alert("In hóa đơn", `In hóa đơn #${maHoaDon} thành công.\nWifi: DACN Cafe / pass: dacncafe2026`);
+        Alert.alert(
+          "In hóa đơn",
+          `In hóa đơn #${maHoaDon} thành công.\nWifi: DACN Cafe / pass: dacncafe2026`,
+        );
       }
     } catch (err) {
       console.error(err);
@@ -433,7 +567,7 @@ export default function InvoiceScreen({ navigation }) {
     setCartItems([]);
     setSelectedCategory("all");
     setEditModalVisible(true);
-    
+
     try {
       const response = await api.get(`/hoadon/${invoice.maHoaDon}`);
       if (response.data && response.data.chiTiet) {
@@ -476,7 +610,9 @@ export default function InvoiceScreen({ navigation }) {
       })),
     };
 
-    const result = await dispatch(updateInvoice({ maHoaDon: editInvoiceId, invoiceData: payload }));
+    const result = await dispatch(
+      updateInvoice({ maHoaDon: editInvoiceId, invoiceData: payload }),
+    );
 
     if (updateInvoice.fulfilled.match(result)) {
       setCartItems([]);
@@ -523,13 +659,22 @@ export default function InvoiceScreen({ navigation }) {
           <Text style={styles.invoiceTitle}>Hóa đơn #{item.maHoaDon}</Text>
 
           <View
-            style={[styles.statusBadge, isPaid ? styles.paid : isCancelled ? styles.cancelled : styles.unpaid]}
+            style={[
+              styles.statusBadge,
+              isPaid
+                ? styles.paid
+                : isCancelled
+                  ? styles.cancelled
+                  : styles.unpaid,
+            ]}
           >
             <Text style={styles.statusText}>{item.trangthaithanhtoan}</Text>
           </View>
         </View>
 
-        <Text style={styles.text}>Ngày lập: {formatDate(item.createdAt || item.ngaylap)}</Text>
+        <Text style={styles.text}>
+          Ngày lập: {formatDate(item.createdAt || item.ngaylap)}
+        </Text>
         <Text style={styles.text}>Nhân viên: {item.HoTen || "Không rõ"}</Text>
         <Text style={styles.total}>
           Tổng tiền: {Number(item.tongtien || 0).toLocaleString("vi-VN")}đ
@@ -541,7 +686,12 @@ export default function InvoiceScreen({ navigation }) {
               style={styles.payBtn}
               onPress={() => handleOpenPaymentModal(item)}
             >
-              <FontAwesome5 name="money-bill-wave" size={12} color="#fff" style={{ marginRight: 6 }} />
+              <FontAwesome5
+                name="money-bill-wave"
+                size={12}
+                color="#fff"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.payText}>Thanh toán</Text>
             </TouchableOpacity>
 
@@ -549,7 +699,12 @@ export default function InvoiceScreen({ navigation }) {
               style={styles.editBtn}
               onPress={() => handleOpenEditModal(item)}
             >
-              <FontAwesome5 name="edit" size={12} color="#fff" style={{ marginRight: 6 }} />
+              <FontAwesome5
+                name="edit"
+                size={12}
+                color="#fff"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.editText}>Sửa đơn</Text>
             </TouchableOpacity>
 
@@ -557,7 +712,12 @@ export default function InvoiceScreen({ navigation }) {
               style={styles.cancelBtn}
               onPress={() => handleCancelInvoice(item.maHoaDon)}
             >
-              <FontAwesome5 name="trash-alt" size={12} color="#fff" style={{ marginRight: 6 }} />
+              <FontAwesome5
+                name="trash-alt"
+                size={12}
+                color="#fff"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.cancelText}>Hủy đơn</Text>
             </TouchableOpacity>
           </View>
@@ -605,18 +765,21 @@ export default function InvoiceScreen({ navigation }) {
   };
 
   const renderDrinksSelection = () => {
-    const activeDrinks = drinks.filter(
-      (d) =>
-        d.trangThai !== "Dừng bán" &&
-        d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const keyword = searchQuery.trim().toLowerCase();
+
+    const activeDrinks = safeDrinks.filter((drink) => {
+      const tenDoUong = drink?.tenDoUong || "";
+
+      return isDrinkActive(drink) && tenDoUong.toLowerCase().includes(keyword);
+    });
 
     if (activeDrinks.length === 0) {
-      return <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>;
+      return (
+        <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>
+      );
     }
 
-    // If searching, show all matches in a grid without headers
-    if (searchQuery.trim().length > 0) {
+    if (searchQuery.trim().length > 0 || selectedCategory === "all") {
       return (
         <View style={styles.gridContainer}>
           {activeDrinks.map((drink) => renderDrinkGridItem(drink))}
@@ -624,35 +787,28 @@ export default function InvoiceScreen({ navigation }) {
       );
     }
 
-    const renderCategorySection = (catId, catName) => {
-      const catDrinks = activeDrinks.filter(
-        (d) => getCategoryForDrink(d) === catId
-      );
+    const catDrinks = activeDrinks.filter(
+      (drink) => getDrinkCategory(drink) === selectedCategory,
+    );
 
-      if (catDrinks.length === 0) return null;
-
+    if (catDrinks.length === 0) {
       return (
-        <View key={catId} style={styles.categorySection}>
-          <Text style={styles.categoryHeader}>{catName.toUpperCase()}</Text>
-          <View style={styles.gridContainer}>
-            {catDrinks.map((drink) => renderDrinkGridItem(drink))}
-          </View>
-        </View>
+        <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>
       );
-    };
-
-    if (selectedCategory === "all") {
-      return (
-        <View>
-          {CATEGORIES.filter((c) => c.id !== "all").map((cat) =>
-            renderCategorySection(cat.id, cat.name)
-          )}
-        </View>
-      );
-    } else {
-      const matchedCat = CATEGORIES.find((c) => c.id === selectedCategory);
-      return renderCategorySection(selectedCategory, matchedCat ? matchedCat.name : "");
     }
+
+    const matchedCat = CATEGORIES.find((cat) => cat.id === selectedCategory);
+    const categoryName = matchedCat ? matchedCat.name : selectedCategory;
+
+    return (
+      <View style={styles.categorySection}>
+        <Text style={styles.categoryHeader}>{categoryName.toUpperCase()}</Text>
+
+        <View style={styles.gridContainer}>
+          {catDrinks.map((drink) => renderDrinkGridItem(drink))}
+        </View>
+      </View>
+    );
   };
 
   if (isLoading && invoices.length === 0) {
@@ -663,6 +819,9 @@ export default function InvoiceScreen({ navigation }) {
       </View>
     );
   }
+
+  const hasPayosQr =
+    Platform.OS === "web" ? Boolean(payosQrImage) : Boolean(payosQrValue);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -715,7 +874,12 @@ export default function InvoiceScreen({ navigation }) {
           <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
             {/* Search Bar for Drinks */}
             <View style={styles.searchWrapper}>
-              <FontAwesome5 name="search" size={14} color="#8d6e63" style={styles.searchIcon} />
+              <FontAwesome5
+                name="search"
+                size={14}
+                color="#8d6e63"
+                style={styles.searchIcon}
+              />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Tìm kiếm đồ uống theo tên..."
@@ -724,7 +888,10 @@ export default function InvoiceScreen({ navigation }) {
                 placeholderTextColor="#aaa"
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearSearchBtn}>
+                <TouchableOpacity
+                  onPress={() => setSearchQuery("")}
+                  style={styles.clearSearchBtn}
+                >
                   <FontAwesome5 name="times-circle" size={14} color="#8d6e63" />
                 </TouchableOpacity>
               )}
@@ -751,7 +918,8 @@ export default function InvoiceScreen({ navigation }) {
                   <Text
                     style={[
                       styles.categoryTabText,
-                      selectedCategory === cat.id && styles.categoryTabTextActive,
+                      selectedCategory === cat.id &&
+                        styles.categoryTabTextActive,
                     ]}
                   >
                     {cat.name}
@@ -768,10 +936,15 @@ export default function InvoiceScreen({ navigation }) {
               <Text style={styles.emptyText}>Chưa chọn món nào</Text>
             ) : (
               cartItems.map((item) => (
-                <View key={`${item.maDoUong}-${item.duong}-${item.da}`} style={styles.cartRow}>
+                <View
+                  key={`${item.maDoUong}-${item.duong}-${item.da}`}
+                  style={styles.cartRow}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.drinkName}>{item.tenDoUong}</Text>
-                    <Text style={{ fontSize: 12, color: "#8d6e63", marginTop: 2 }}>
+                    <Text
+                      style={{ fontSize: 12, color: "#8d6e63", marginTop: 2 }}
+                    >
                       Ghi chú: {item.duong} đường, {item.da} đá
                     </Text>
                     <Text style={styles.drinkPrice}>
@@ -783,7 +956,9 @@ export default function InvoiceScreen({ navigation }) {
                   <View style={styles.quantityBox}>
                     <TouchableOpacity
                       style={styles.quantityBtn}
-                      onPress={() => handleDecreaseDrink(item.maDoUong, item.duong, item.da)}
+                      onPress={() =>
+                        handleDecreaseDrink(item.maDoUong, item.duong, item.da)
+                      }
                     >
                       <Text style={styles.quantityText}>-</Text>
                     </TouchableOpacity>
@@ -836,7 +1011,12 @@ export default function InvoiceScreen({ navigation }) {
           <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
             {/* Search Bar for Drinks */}
             <View style={styles.searchWrapper}>
-              <FontAwesome5 name="search" size={14} color="#8d6e63" style={styles.searchIcon} />
+              <FontAwesome5
+                name="search"
+                size={14}
+                color="#8d6e63"
+                style={styles.searchIcon}
+              />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Tìm kiếm đồ uống theo tên..."
@@ -845,7 +1025,10 @@ export default function InvoiceScreen({ navigation }) {
                 placeholderTextColor="#aaa"
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearSearchBtn}>
+                <TouchableOpacity
+                  onPress={() => setSearchQuery("")}
+                  style={styles.clearSearchBtn}
+                >
                   <FontAwesome5 name="times-circle" size={14} color="#8d6e63" />
                 </TouchableOpacity>
               )}
@@ -872,7 +1055,8 @@ export default function InvoiceScreen({ navigation }) {
                   <Text
                     style={[
                       styles.categoryTabText,
-                      selectedCategory === cat.id && styles.categoryTabTextActive,
+                      selectedCategory === cat.id &&
+                        styles.categoryTabTextActive,
                     ]}
                   >
                     {cat.name}
@@ -889,10 +1073,15 @@ export default function InvoiceScreen({ navigation }) {
               <Text style={styles.emptyText}>Chưa chọn món nào</Text>
             ) : (
               cartItems.map((item) => (
-                <View key={`${item.maDoUong}-${item.duong}-${item.da}`} style={styles.cartRow}>
+                <View
+                  key={`${item.maDoUong}-${item.duong}-${item.da}`}
+                  style={styles.cartRow}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.drinkName}>{item.tenDoUong}</Text>
-                    <Text style={{ fontSize: 12, color: "#8d6e63", marginTop: 2 }}>
+                    <Text
+                      style={{ fontSize: 12, color: "#8d6e63", marginTop: 2 }}
+                    >
                       Ghi chú: {item.duong} đường, {item.da} đá
                     </Text>
                     <Text style={styles.drinkPrice}>
@@ -904,7 +1093,9 @@ export default function InvoiceScreen({ navigation }) {
                   <View style={styles.quantityBox}>
                     <TouchableOpacity
                       style={styles.quantityBtn}
-                      onPress={() => handleDecreaseDrink(item.maDoUong, item.duong, item.da)}
+                      onPress={() =>
+                        handleDecreaseDrink(item.maDoUong, item.duong, item.da)
+                      }
                     >
                       <Text style={styles.quantityText}>-</Text>
                     </TouchableOpacity>
@@ -955,7 +1146,7 @@ export default function InvoiceScreen({ navigation }) {
             <Text style={styles.optionsModalTitle}>
               Tùy chỉnh: {customizingDrink?.tenDoUong}
             </Text>
-            
+
             <Text style={styles.optionsLabel}>Chọn lượng đường:</Text>
             <View style={styles.optionsRow}>
               {["0%", "30%", "50%", "70%", "100%"].map((level) => (
@@ -1031,9 +1222,16 @@ export default function InvoiceScreen({ navigation }) {
         onRequestClose={() => setPaymentModalVisible(false)}
       >
         <View style={styles.optionsModalOverlay}>
-          <View style={[styles.optionsModalContainer, { maxWidth: 500, width: "90%" }]}>
+          <View
+            style={[
+              styles.optionsModalContainer,
+              { maxWidth: 500, width: "90%" },
+            ]}
+          >
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Thanh toán hóa đơn #{selectedPaymentInvoice?.maHoaDon}</Text>
+              <Text style={styles.modalTitle}>
+                Thanh toán hóa đơn #{selectedPaymentInvoice?.maHoaDon}
+              </Text>
               <TouchableOpacity onPress={() => setPaymentModalVisible(false)}>
                 <FontAwesome5 name="times" size={20} color="#4b3621" />
               </TouchableOpacity>
@@ -1042,12 +1240,22 @@ export default function InvoiceScreen({ navigation }) {
             <View style={styles.invoiceInfoBox}>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Nhân viên lập:</Text>
-                <Text style={styles.infoValue}>{selectedPaymentInvoice?.HoTen || "Không rõ"}</Text>
+                <Text style={styles.infoValue}>
+                  {selectedPaymentInvoice?.HoTen || "Không rõ"}
+                </Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Tổng tiền:</Text>
-                <Text style={[styles.infoValue, { color: "#2e7d32", fontSize: 18, fontWeight: "bold" }]}>
-                  {Number(selectedPaymentInvoice?.tongtien || 0).toLocaleString("vi-VN")}đ
+                <Text
+                  style={[
+                    styles.infoValue,
+                    { color: "#2e7d32", fontSize: 18, fontWeight: "bold" },
+                  ]}
+                >
+                  {Number(selectedPaymentInvoice?.tongtien || 0).toLocaleString(
+                    "vi-VN",
+                  )}
+                  đ
                 </Text>
               </View>
             </View>
@@ -1055,7 +1263,10 @@ export default function InvoiceScreen({ navigation }) {
             {/* Method selection tabs */}
             <View style={styles.tabContainer}>
               <TouchableOpacity
-                style={[styles.tabButton, paymentMethod === "tienmat" && styles.activeTab]}
+                style={[
+                  styles.tabButton,
+                  paymentMethod === "tienmat" && styles.activeTab,
+                ]}
                 onPress={() => setPaymentMethod("tienmat")}
               >
                 <FontAwesome5
@@ -1064,13 +1275,21 @@ export default function InvoiceScreen({ navigation }) {
                   color={paymentMethod === "tienmat" ? "#fff" : "#8d6e63"}
                   style={{ marginRight: 6 }}
                 />
-                <Text style={[styles.tabText, paymentMethod === "tienmat" && styles.activeTabText]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    paymentMethod === "tienmat" && styles.activeTabText,
+                  ]}
+                >
                   Tiền mặt
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.tabButton, paymentMethod === "qr" && styles.activeTab]}
+                style={[
+                  styles.tabButton,
+                  paymentMethod === "qr" && styles.activeTab,
+                ]}
                 onPress={() => setPaymentMethod("qr")}
               >
                 <FontAwesome5
@@ -1079,7 +1298,12 @@ export default function InvoiceScreen({ navigation }) {
                   color={paymentMethod === "qr" ? "#fff" : "#8d6e63"}
                   style={{ marginRight: 6 }}
                 />
-                <Text style={[styles.tabText, paymentMethod === "qr" && styles.activeTabText]}>
+                <Text
+                  style={[
+                    styles.tabText,
+                    paymentMethod === "qr" && styles.activeTabText,
+                  ]}
+                >
                   Quét mã QR
                 </Text>
               </TouchableOpacity>
@@ -1095,14 +1319,24 @@ export default function InvoiceScreen({ navigation }) {
                     placeholderTextColor="#aaa"
                     keyboardType="numeric"
                     value={customerCash}
-                    onChangeText={(text) => handleCashChange(text, selectedPaymentInvoice?.tongtien || 0)}
+                    onChangeText={(text) =>
+                      handleCashChange(
+                        text,
+                        selectedPaymentInvoice?.tongtien || 0,
+                      )
+                    }
                   />
 
                   {/* Quick cash select options */}
                   <View style={styles.quickCashContainer}>
                     <TouchableOpacity
                       style={styles.quickCashBtn}
-                      onPress={() => selectQuickAmount(selectedPaymentInvoice?.tongtien || 0, selectedPaymentInvoice?.tongtien || 0)}
+                      onPress={() =>
+                        selectQuickAmount(
+                          selectedPaymentInvoice?.tongtien || 0,
+                          selectedPaymentInvoice?.tongtien || 0,
+                        )
+                      }
                     >
                       <Text style={styles.quickCashText}>Đủ</Text>
                     </TouchableOpacity>
@@ -1111,10 +1345,15 @@ export default function InvoiceScreen({ navigation }) {
                         <TouchableOpacity
                           key={amount}
                           style={styles.quickCashBtn}
-                          onPress={() => selectQuickAmount(amount, selectedPaymentInvoice?.tongtien || 0)}
+                          onPress={() =>
+                            selectQuickAmount(
+                              amount,
+                              selectedPaymentInvoice?.tongtien || 0,
+                            )
+                          }
                         >
                           <Text style={styles.quickCashText}>
-                            {(amount / 1000)}k
+                            {amount / 1000}k
                           </Text>
                         </TouchableOpacity>
                       );
@@ -1122,7 +1361,9 @@ export default function InvoiceScreen({ navigation }) {
                   </View>
 
                   <View style={styles.changeDueBox}>
-                    <Text style={styles.changeDueLabel}>Tiền thừa trả khách:</Text>
+                    <Text style={styles.changeDueLabel}>
+                      Tiền thừa trả khách:
+                    </Text>
                     <Text style={styles.changeDueValue}>
                       {changeDue.toLocaleString("vi-VN")}đ
                     </Text>
@@ -1131,22 +1372,83 @@ export default function InvoiceScreen({ navigation }) {
               ) : (
                 <View style={styles.qrGuideContainer}>
                   <Text style={styles.qrGuideTitle}>
-                    <FontAwesome5 name="info-circle" size={14} color="#8d6e63" /> Hướng dẫn tích hợp thanh toán QR
+                    <FontAwesome5 name="qrcode" size={14} color="#8d6e63" />{" "}
+                    Thanh toán payOS
                   </Text>
+
                   <Text style={styles.qrGuideText}>
-                    Theo yêu cầu của bạn, phần thanh toán QR này được hướng dẫn để bạn tự thực hiện:
+                    Khách hàng quét mã QR này để mở trang thanh toán payOS.
                   </Text>
-                  <Text style={styles.qrStep}>
-                    1. <Text style={{ fontWeight: "bold" }}>Sinh mã QR thanh toán động</Text>: Bạn có thể sử dụng dịch vụ miễn phí từ VietQR.io bằng cách nhúng trực tiếp thẻ ảnh để sinh mã QR tự động:
-                  </Text>
-                  <View style={styles.codeBlock}>
-                    <Text style={styles.codeText}>
-                      {"https://img.vietqr.io/image/<BANK_ID>-<ACCOUNT_NO>-compact2.png?amount=" + (selectedPaymentInvoice?.tongtien || 0) + "&addInfo=HD" + (selectedPaymentInvoice?.maHoaDon || "")}
-                    </Text>
+
+                  <View style={styles.invoiceInfoBox}>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Mã hóa đơn:</Text>
+                      <Text style={styles.infoValue}>
+                        #{selectedPaymentInvoice?.maHoaDon}
+                      </Text>
+                    </View>
+
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Số tiền:</Text>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          {
+                            color: "#2e7d32",
+                            fontSize: 18,
+                            fontWeight: "bold",
+                          },
+                        ]}
+                      >
+                        {Number(
+                          selectedPaymentInvoice?.tongtien || 0,
+                        ).toLocaleString("vi-VN")}
+                        đ
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.qrStep}>
-                    2. <Text style={{ fontWeight: "bold" }}>Webhook kiểm tra trạng thái</Text>: Sử dụng giải pháp từ PayOS hoặc các bên trung gian khác để đăng ký địa chỉ Webhook của server bạn. Khi khách hàng chuyển khoản thành công, hệ thống PayOS sẽ gửi thông tin giao dịch về API của bạn, sau đó bạn tự động cập nhật trạng thái hóa đơn này thành "Đã thanh toán".
-                  </Text>
+
+                  {hasPayosQr ? (
+                    <View style={{ alignItems: "center", marginTop: 16 }}>
+                      {Platform.OS === "web" ? (
+                        <Image
+                          source={{ uri: payosQrImage }}
+                          style={{ width: 260, height: 260 }}
+                        />
+                      ) : (
+                        <QRCodeSvg value={payosQrValue} size={260} />
+                      )}
+
+                      <Text
+                        style={{
+                          marginTop: 10,
+                          textAlign: "center",
+                          color: "#666",
+                        }}
+                      >
+                        Dùng điện thoại khác quét mã này để thanh toán.
+                      </Text>
+
+                      <TouchableOpacity
+                        style={[styles.optionsConfirmBtn, { marginTop: 12 }]}
+                        onPress={() => {
+                          if (Platform.OS === "web") {
+                            window.open(payosCheckoutUrl, "_blank");
+                          } else {
+                            Linking.openURL(payosCheckoutUrl);
+                          }
+                        }}
+                      >
+                        <Text style={styles.optionsConfirmText}>
+                          Mở trang payOS
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <Text style={styles.qrStep}>
+                      Bấm nút bên dưới để tạo mã QR thanh toán cho hóa đơn này.
+                    </Text>
+                  )}
                 </View>
               )}
             </ScrollView>
@@ -1163,12 +1465,34 @@ export default function InvoiceScreen({ navigation }) {
                 <TouchableOpacity
                   style={[
                     styles.optionsConfirmBtn,
-                    (parseFloat(customerCash.replace(/[^0-9]/g, "")) || 0) < (selectedPaymentInvoice?.tongtien || 0) && { backgroundColor: "#aaa" }
+                    (parseFloat(customerCash.replace(/[^0-9]/g, "")) || 0) <
+                      (selectedPaymentInvoice?.tongtien || 0) && {
+                      backgroundColor: "#aaa",
+                    },
                   ]}
-                  disabled={(parseFloat(customerCash.replace(/[^0-9]/g, "")) || 0) < (selectedPaymentInvoice?.tongtien || 0)}
+                  disabled={
+                    (parseFloat(customerCash.replace(/[^0-9]/g, "")) || 0) <
+                    (selectedPaymentInvoice?.tongtien || 0)
+                  }
                   onPress={executePayment}
                 >
-                  <Text style={styles.optionsConfirmText}>Thanh toán & In bill</Text>
+                  <Text style={styles.optionsConfirmText}>
+                    Thanh toán & In bill
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {paymentMethod === "qr" && !hasPayosQr && (
+                <TouchableOpacity
+                  style={[
+                    styles.optionsConfirmBtn,
+                    isCreatingPayos && { backgroundColor: "#aaa" },
+                  ]}
+                  disabled={isCreatingPayos}
+                  onPress={handleCreatePayosQr}
+                >
+                  <Text style={styles.optionsConfirmText}>
+                    {isCreatingPayos ? "Đang tạo mã QR..." : "Tạo mã QR payOS"}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1182,19 +1506,19 @@ export default function InvoiceScreen({ navigation }) {
 const formatDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
-  
+
   const d = date.getDate().toString().padStart(2, "0");
   const m = (date.getMonth() + 1).toString().padStart(2, "0");
   const y = date.getFullYear();
-  
+
   const hh = date.getHours().toString().padStart(2, "0");
   const mm = date.getMinutes().toString().padStart(2, "0");
   const ss = date.getSeconds().toString().padStart(2, "0");
-  
+
   if (hh === "00" && mm === "00" && ss === "00") {
     return `${d}/${m}/${y}`;
   }
-  
+
   return `${hh}:${mm}:${ss} - ${d}/${m}/${y}`;
 };
 

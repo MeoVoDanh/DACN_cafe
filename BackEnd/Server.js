@@ -11,14 +11,19 @@ import doanhthuRoutes from "./routes/doanhthu.js";
 import canhanRoutes from "./routes/canhan.js";
 import path from "path";
 import multer from "multer";
+import payosRoutes from "./routes/payos.js";
 
 dotenv.config();
 const app = express();
 
 app.use(cors());
 app.use((req, res, next) => {
-  const authHeader = req.headers.authorization ? req.headers.authorization : "None";
-  console.log(`[Request] ${req.method} ${req.url} - Auth Header: ${authHeader}`);
+  const authHeader = req.headers.authorization
+    ? req.headers.authorization
+    : "None";
+  console.log(
+    `[Request] ${req.method} ${req.url} - Auth Header: ${authHeader}`,
+  );
   next();
 });
 app.use(express.json());
@@ -30,6 +35,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/payos", payosRoutes);
 app.use("/api/douong", douongRoutes);
 app.use("/api/danhmuc", danhmucRoutes);
 app.use("/api/nhanvien", nhanvienRoutes);
