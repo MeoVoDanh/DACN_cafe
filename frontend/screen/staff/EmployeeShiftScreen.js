@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,8 @@ import {
   registerShift,
 } from "../../redux/employeeShiftSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
+import api from "../../redux/api";
+
 
 export default function EmployeeShiftScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -36,6 +38,13 @@ export default function EmployeeShiftScreen({ navigation }) {
   const [tab, setTab] = useState("available"); // "available" (Đăng ký ca) hoặc "mine" (Ca của tôi)
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dateInputStr, setDateInputStr] = useState(getLocalDateString(new Date()));
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
+  const [lastLoadedTime, setLastLoadedTime] = useState(0);
+
+  const lastLoadedTimeRef = useRef(lastLoadedTime);
+  useEffect(() => {
+    lastLoadedTimeRef.current = lastLoadedTime;
+  }, [lastLoadedTime]);
 
   const { availableShifts, myShifts, isLoading, error, message } = useSelector(
     (state) => state.employeeShift,
@@ -181,11 +190,39 @@ export default function EmployeeShiftScreen({ navigation }) {
     },
   ];
 
-  // Fetch dữ liệu mỗi khi người dùng quay lại màn hình này
+  const loadDataAndResetBadge = async () => {
+    dispatch(fetchAvailableShifts());
+    dispatch(fetchMyShifts());
+    try {
+      const res = await api.get("/check-updates");
+      setLastLoadedTime(res.data.shiftTime);
+      setHasNewUpdates(false);
+    } catch (err) {
+      console.log("Error checking updates:", err);
+    }
+  };
+
+  const handleManualReload = () => {
+    loadDataAndResetBadge();
+  };
+
+  // Fetch dữ liệu mỗi khi người dùng quay lại màn hình này và check cập nhật mỗi 5 giây
   useFocusEffect(
     useCallback(() => {
-      dispatch(fetchAvailableShifts());
-      dispatch(fetchMyShifts());
+      loadDataAndResetBadge();
+
+      const interval = setInterval(async () => {
+        try {
+          const res = await api.get("/check-updates");
+          if (res.data.shiftTime > lastLoadedTimeRef.current) {
+            setHasNewUpdates(true);
+          }
+        } catch (err) {
+          console.log("Error checking updates:", err);
+        }
+      }, 5000);
+
+      return () => clearInterval(interval);
     }, [dispatch])
   );
 
@@ -203,10 +240,7 @@ export default function EmployeeShiftScreen({ navigation }) {
 
   const reloadData = async () => {
     setRefreshing(true);
-    await Promise.all([
-      dispatch(fetchAvailableShifts()),
-      dispatch(fetchMyShifts()),
-    ]);
+    await loadDataAndResetBadge();
     setRefreshing(false);
   };
 
@@ -295,6 +329,7 @@ export default function EmployeeShiftScreen({ navigation }) {
         ghiChu: "Ca làm này hiện đã có người đăng ký hoặc chưa được mở.",
         ...config,
         type: "unavailable",
+        soNguoiDaDangKy: 5,
       };
     });
   };
@@ -313,7 +348,15 @@ export default function EmployeeShiftScreen({ navigation }) {
               <FontAwesome5 name={item.icon} size={14} color="#fff" />
             </View>
             <View>
-              <Text style={styles.shiftName}>{item.tenCa}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Text style={styles.shiftName}>{item.tenCa}</Text>
+                {(item.soNguoiDaDangKy ?? 0) < 3 && (
+                  <View style={styles.warningBadge}>
+                    <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                    <Text style={styles.warningBadgeText}>Thiếu người ({(item.soNguoiDaDangKy ?? 0)}/3)</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.shiftTime}>{item.time}</Text>
             </View>
           </View>
@@ -405,7 +448,15 @@ export default function EmployeeShiftScreen({ navigation }) {
               <FontAwesome5 name={config.icon} size={14} color="#fff" />
             </View>
             <View>
-              <Text style={styles.shiftName}>{item.tenCa}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Text style={styles.shiftName}>{item.tenCa}</Text>
+                {(item.soNguoiDaDangKy ?? 0) < 3 && (
+                  <View style={styles.warningBadge}>
+                    <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                    <Text style={styles.warningBadgeText}>Thiếu người ({(item.soNguoiDaDangKy ?? 0)}/3)</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.shiftTime}>{config.time}</Text>
             </View>
           </View>
@@ -464,14 +515,34 @@ export default function EmployeeShiftScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerBox}>
+      <View style={[styles.headerBox, { justifyContent: "space-between", flexWrap: "wrap", gap: 10 }]}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("EmployeeDashboardScreen")}
+            style={styles.backBtn}
+          >
+            <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Quản lý ca làm</Text>
+        </View>
+
         <TouchableOpacity
-          onPress={() => navigation.navigate("EmployeeDashboardScreen")}
-          style={styles.backBtn}
+          onPress={handleManualReload}
+          style={[
+            styles.reloadBtn,
+            hasNewUpdates && styles.reloadBtnHighlight
+          ]}
+          activeOpacity={0.7}
         >
-          <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+          <FontAwesome5 
+            name="sync" 
+            size={14} 
+            color={hasNewUpdates ? "#fff" : "#4b3621"} 
+          />
+          {hasNewUpdates && (
+            <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
+          )}
         </TouchableOpacity>
-        <Text style={styles.title}>Quản lý ca làm</Text>
       </View>
 
       <View style={styles.tabBox}>
@@ -879,5 +950,41 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#4b3621",
     marginTop: 12,
+  },
+  warningBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E0",
+    borderColor: "#FFCCBC",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 3,
+  },
+  warningBadgeText: {
+    fontSize: 9,
+    fontWeight: "bold",
+    color: "#d84315",
+  },
+  reloadBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  reloadBtnHighlight: {
+    width: "auto",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    backgroundColor: "#e65100",
+    gap: 6,
+  },
+  reloadBtnText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
 });

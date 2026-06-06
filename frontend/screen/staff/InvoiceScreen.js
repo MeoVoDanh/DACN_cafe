@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -66,6 +67,13 @@ export default function InvoiceScreen({ navigation }) {
   const [cartItems, setCartItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
+  const [lastLoadedTime, setLastLoadedTime] = useState(0);
+
+  const lastLoadedTimeRef = useRef(lastLoadedTime);
+  useEffect(() => {
+    lastLoadedTimeRef.current = lastLoadedTime;
+  }, [lastLoadedTime]);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editInvoiceId, setEditInvoiceId] = useState(null);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
@@ -85,10 +93,59 @@ export default function InvoiceScreen({ navigation }) {
   const [payosCheckoutUrl, setPayosCheckoutUrl] = useState("");
   const [payosOrderCode, setPayosOrderCode] = useState(null);
   const payosPollingRef = useRef(null);
-  useEffect(() => {
+  const loadDataAndResetBadge = async () => {
     dispatch(fetchInvoices());
     dispatch(fetchDrinksForInvoice());
-  }, [dispatch]);
+    try {
+      const res = await api.get("/check-updates");
+      const latestTime = Math.max(res.data.menuTime || 0, res.data.revenueTime || 0);
+      setLastLoadedTime(latestTime);
+      setHasNewUpdates(false);
+    } catch (err) {
+      console.log("Error checking updates:", err);
+    }
+  };
+
+  const handleManualReload = () => {
+    if (hasNewUpdates && (cartItems.length > 0 || modalVisible)) {
+      if (Platform.OS === "web") {
+        const confirmReload = window.confirm("Có cập nhật mới từ database. Tải lại sẽ làm mất các món đang chọn trong giỏ hàng. Bạn có muốn tải lại không?");
+        if (!confirmReload) return;
+      } else {
+        Alert.alert(
+          "Cập nhật mới",
+          "Có dữ liệu mới từ database. Tải lại sẽ làm mất các món đang chọn trong giỏ hàng. Bạn có muốn tải lại không?",
+          [
+            { text: "Hủy", style: "cancel" },
+            { text: "Tải lại", onPress: () => loadDataAndResetBadge() }
+          ]
+        );
+        return;
+      }
+    }
+    loadDataAndResetBadge();
+  };
+
+  // Fetch invoices and drinks when screen is focused and poll check-updates every 5 seconds
+  useFocusEffect(
+    useCallback(() => {
+      loadDataAndResetBadge();
+
+      const interval = setInterval(async () => {
+        try {
+          const res = await api.get("/check-updates");
+          const latestTime = Math.max(res.data.menuTime || 0, res.data.revenueTime || 0);
+          if (latestTime > lastLoadedTimeRef.current) {
+            setHasNewUpdates(true);
+          }
+        } catch (err) {
+          console.log("Error checking updates:", err);
+        }
+      }, 5000);
+
+      return () => clearInterval(interval);
+    }, [dispatch])
+  );
 
   useEffect(() => {
     if (error) {
@@ -123,8 +180,7 @@ export default function InvoiceScreen({ navigation }) {
   }, [paymentModalVisible]);
 
   const reloadData = () => {
-    dispatch(fetchInvoices());
-    dispatch(fetchDrinksForInvoice());
+    loadDataAndResetBadge();
   };
 
   const handleAddDrink = (drink, duong = "100%", da = "100%") => {
@@ -332,6 +388,11 @@ export default function InvoiceScreen({ navigation }) {
 
             reloadData();
             Alert.alert("Thông báo", "Thanh toán payOS thành công");
+            
+            const cashVal = selectedPaymentInvoice?.tongtien
+              ? selectedPaymentInvoice.tongtien.toString()
+              : "0";
+            handlePrintBill(maHoaDon, cashVal, 0);
           }
         } catch (statusError) {
           console.log(
@@ -764,6 +825,33 @@ export default function InvoiceScreen({ navigation }) {
     );
   };
 
+  const renderCategorySectionForSelection = (catName, drinksList) => {
+    const catDrinks = drinksList.filter(
+      (drink) => getDrinkCategory(drink) === catName,
+    );
+
+    if (catDrinks.length === 0) return null;
+
+    return (
+      <View key={catName} style={styles.categorySection}>
+        <View style={styles.categorySectionHeader}>
+          <FontAwesome5
+            name="folder-open"
+            size={13}
+            color="#8d6e63"
+            style={{ marginRight: 8 }}
+          />
+          <Text style={styles.categoryHeaderTitle}>{catName.toUpperCase()}</Text>
+          <View style={styles.categoryHeaderLine} />
+        </View>
+
+        <View style={styles.gridContainer}>
+          {catDrinks.map((drink) => renderDrinkGridItem(drink))}
+        </View>
+      </View>
+    );
+  };
+
   const renderDrinksSelection = () => {
     const keyword = searchQuery.trim().toLowerCase();
 
@@ -779,7 +867,7 @@ export default function InvoiceScreen({ navigation }) {
       );
     }
 
-    if (searchQuery.trim().length > 0 || selectedCategory === "all") {
+    if (searchQuery.trim().length > 0) {
       return (
         <View style={styles.gridContainer}>
           {activeDrinks.map((drink) => renderDrinkGridItem(drink))}
@@ -787,28 +875,27 @@ export default function InvoiceScreen({ navigation }) {
       );
     }
 
-    const catDrinks = activeDrinks.filter(
-      (drink) => getDrinkCategory(drink) === selectedCategory,
-    );
-
-    if (catDrinks.length === 0) {
+    if (selectedCategory === "all") {
+      const categoriesToRender = CATEGORIES.filter((cat) => cat.id !== "all");
       return (
-        <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>
+        <View>
+          {categoriesToRender.map((cat) =>
+            renderCategorySectionForSelection(cat.name, activeDrinks),
+          )}
+        </View>
       );
     }
 
     const matchedCat = CATEGORIES.find((cat) => cat.id === selectedCategory);
     const categoryName = matchedCat ? matchedCat.name : selectedCategory;
 
-    return (
-      <View style={styles.categorySection}>
-        <Text style={styles.categoryHeader}>{categoryName.toUpperCase()}</Text>
-
-        <View style={styles.gridContainer}>
-          {catDrinks.map((drink) => renderDrinkGridItem(drink))}
-        </View>
-      </View>
-    );
+    const rendered = renderCategorySectionForSelection(categoryName, activeDrinks);
+    if (!rendered) {
+      return (
+        <Text style={styles.emptyText}>Không tìm thấy đồ uống phù hợp</Text>
+      );
+    }
+    return rendered;
   };
 
   if (isLoading && invoices.length === 0) {
@@ -836,18 +923,38 @@ export default function InvoiceScreen({ navigation }) {
           <Text style={styles.title}>Quản lý hóa đơn</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => {
-            setSearchQuery("");
-            setCartItems([]);
-            setSelectedCategory("all");
-            setModalVisible(true);
-          }}
-        >
-          <FontAwesome5 name="plus" size={14} color="#fff" />
-          <Text style={styles.addText}>Tạo hóa đơn</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <TouchableOpacity
+            onPress={handleManualReload}
+            style={[
+              styles.reloadBtn,
+              hasNewUpdates && styles.reloadBtnHighlight
+            ]}
+            activeOpacity={0.7}
+          >
+            <FontAwesome5 
+              name="sync" 
+              size={13} 
+              color={hasNewUpdates ? "#fff" : "#4b3621"} 
+            />
+            {hasNewUpdates && (
+              <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => {
+              setSearchQuery("");
+              setCartItems([]);
+              setSelectedCategory("all");
+              setModalVisible(true);
+            }}
+          >
+            <FontAwesome5 name="plus" size={14} color="#fff" />
+            <Text style={styles.addText}>Tạo hóa đơn</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -863,12 +970,11 @@ export default function InvoiceScreen({ navigation }) {
 
       <Modal visible={modalVisible} animationType="slide">
         <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Tạo hóa đơn mới</Text>
-
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
-              <FontAwesome5 name="times" size={22} color="#4b3621" />
+          <View style={[styles.modalHeader, { justifyContent: "flex-start" }]}>
+            <TouchableOpacity onPress={() => setModalVisible(false)} style={{ marginRight: 12, padding: 4 }}>
+              <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
             </TouchableOpacity>
+            <Text style={styles.modalTitle}>Tạo hóa đơn mới</Text>
           </View>
 
           <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
@@ -1000,12 +1106,11 @@ export default function InvoiceScreen({ navigation }) {
 
       <Modal visible={editModalVisible} animationType="slide">
         <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Sửa hóa đơn #{editInvoiceId}</Text>
-
-            <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-              <FontAwesome5 name="times" size={22} color="#4b3621" />
+          <View style={[styles.modalHeader, { justifyContent: "flex-start" }]}>
+            <TouchableOpacity onPress={() => setEditModalVisible(false)} style={{ marginRight: 12, padding: 4 }}>
+              <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
             </TouchableOpacity>
+            <Text style={styles.modalTitle}>Sửa hóa đơn #{editInvoiceId}</Text>
           </View>
 
           <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
@@ -1228,13 +1333,13 @@ export default function InvoiceScreen({ navigation }) {
               { maxWidth: 500, width: "90%" },
             ]}
           >
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { justifyContent: "flex-start" }]}>
+              <TouchableOpacity onPress={() => setPaymentModalVisible(false)} style={{ marginRight: 12, padding: 4 }}>
+                <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+              </TouchableOpacity>
               <Text style={styles.modalTitle}>
                 Thanh toán hóa đơn #{selectedPaymentInvoice?.maHoaDon}
               </Text>
-              <TouchableOpacity onPress={() => setPaymentModalVisible(false)}>
-                <FontAwesome5 name="times" size={20} color="#4b3621" />
-              </TouchableOpacity>
             </View>
 
             <View style={styles.invoiceInfoBox}>
@@ -2128,6 +2233,25 @@ const styles = StyleSheet.create({
   categorySection: {
     marginBottom: 20,
   },
+  categorySectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+    marginTop: 6,
+    paddingHorizontal: 4,
+  },
+  categoryHeaderTitle: {
+    fontSize: 13,
+    fontWeight: "bold",
+    color: "#8d6e63",
+    letterSpacing: 1,
+  },
+  categoryHeaderLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#eadfd3",
+    marginLeft: 10,
+  },
   categoryHeader: {
     fontSize: 15,
     fontWeight: "bold",
@@ -2224,5 +2348,25 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     justifyContent: "center",
     alignItems: "center",
+  },
+  reloadBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  reloadBtnHighlight: {
+    width: "auto",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    backgroundColor: "#e65100",
+    gap: 6,
+  },
+  reloadBtnText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
 });

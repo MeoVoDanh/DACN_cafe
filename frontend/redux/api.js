@@ -1,9 +1,9 @@
 import axios from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getStorageItem } from "./storage";
 
 //dùng trên máy mình thì chỉ dùng localhost
 //con sài trên điện thoại thì dùng địa chị ip của máy và tắt firewall
-const API_BASE_URL = "http://192.168.203.1:3000/api";
+const API_BASE_URL = "http://172.30.16.1:3000/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -13,7 +13,7 @@ const api = axios.create({
 // Tự động gắn token vào mọi request
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem("token");
+    const token = await getStorageItem("token");
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -39,6 +40,13 @@ export default function MenuScreen({ navigation }) {
 
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
+  const [lastLoadedTime, setLastLoadedTime] = useState(0);
+
+  const lastLoadedTimeRef = useRef(lastLoadedTime);
+  useEffect(() => {
+    lastLoadedTimeRef.current = lastLoadedTime;
+  }, [lastLoadedTime]);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [renamingCategory, setRenamingCategory] = useState(null);
@@ -47,25 +55,38 @@ export default function MenuScreen({ navigation }) {
     (state) => state.menu,
   );
 
+  const resolvedDrinks = useMemo(() => {
+    if (!Array.isArray(drinks)) return [];
+    return drinks.map((d) => {
+      if (d.danhMuc && !isNaN(Number(d.danhMuc)) && Array.isArray(dbCategoriesRaw)) {
+        const found = dbCategoriesRaw.find((c) => Number(c.maDanhMuc) === Number(d.danhMuc));
+        if (found) {
+          return { ...d, danhMuc: found.tenDanhMuc };
+        }
+      }
+      return d;
+    });
+  }, [drinks, dbCategoriesRaw]);
+
   const CATEGORIES = useMemo(() => {
-    const dbCategories = Array.from(
-      new Set(dbCategoriesRaw.map((c) => c.tenDanhMuc))
-    );
-    return ["Tất cả", ...dbCategories];
-  }, [dbCategoriesRaw]);
+    const dbCategories = Array.isArray(dbCategoriesRaw) ? dbCategoriesRaw.map((c) => c.tenDanhMuc) : [];
+    const fromDrinks = Array.isArray(resolvedDrinks) ? resolvedDrinks.map((d) => d.danhMuc).filter(Boolean) : [];
+    const combined = Array.from(new Set([...dbCategories, ...fromDrinks]));
+    return ["Tất cả", ...combined];
+  }, [dbCategoriesRaw, resolvedDrinks]);
 
   const quickCategories = useMemo(() => {
-    return Array.from(
-      new Set(dbCategoriesRaw.map((c) => c.tenDanhMuc))
-    );
-  }, [dbCategoriesRaw]);
+    const dbCategories = Array.isArray(dbCategoriesRaw) ? dbCategoriesRaw.map((c) => c.tenDanhMuc) : [];
+    const fromDrinks = Array.isArray(resolvedDrinks) ? resolvedDrinks.map((d) => d.danhMuc).filter(Boolean) : [];
+    return Array.from(new Set([...dbCategories, ...fromDrinks]));
+  }, [dbCategoriesRaw, resolvedDrinks]);
 
   const searchedDrinks = useMemo(() => {
-    if (!searchQuery.trim()) return drinks;
-    return drinks.filter((d) =>
+    if (!searchQuery.trim()) return resolvedDrinks;
+    return resolvedDrinks.filter((d) =>
       d.tenDoUong.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [drinks, searchQuery]);
+  }, [resolvedDrinks, searchQuery]);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingDrink, setEditingDrink] = useState(null);
@@ -77,10 +98,57 @@ export default function MenuScreen({ navigation }) {
   const [trangThai, setTrangThai] = useState("Đang bán");
   const [danhMuc, setDanhMuc] = useState("Khác");
 
-  useEffect(() => {
+  const loadDataAndResetBadge = async () => {
     dispatch(fetchDrinks());
     dispatch(fetchCategories());
-  }, [dispatch]);
+    try {
+      const res = await api.get("/check-updates");
+      setLastLoadedTime(res.data.menuTime);
+      setHasNewUpdates(false);
+    } catch (err) {
+      console.log("Error checking updates:", err);
+    }
+  };
+
+  const handleManualReload = () => {
+    if (hasNewUpdates && modalVisible) {
+      if (Platform.OS === "web") {
+        const confirmReload = window.confirm("Có dữ liệu mới từ database. Tải lại sẽ làm mất các thay đổi chưa lưu trong form. Bạn có muốn tải lại không?");
+        if (!confirmReload) return;
+      } else {
+        Alert.alert(
+          "Cập nhật mới",
+          "Có dữ liệu mới từ database. Tải lại sẽ làm mất các thay đổi chưa lưu trong form. Bạn có muốn tải lại không?",
+          [
+            { text: "Hủy", style: "cancel" },
+            { text: "Tải lại", onPress: () => loadDataAndResetBadge() }
+          ]
+        );
+        return;
+      }
+    }
+    loadDataAndResetBadge();
+  };
+
+  // Fetch drinks and categories when screen is focused and poll check-updates every 5 seconds
+  useFocusEffect(
+    useCallback(() => {
+      loadDataAndResetBadge();
+
+      const interval = setInterval(async () => {
+        try {
+          const res = await api.get("/check-updates");
+          if (res.data.menuTime > lastLoadedTimeRef.current) {
+            setHasNewUpdates(true);
+          }
+        } catch (err) {
+          console.log("Error checking updates:", err);
+        }
+      }, 5000);
+
+      return () => clearInterval(interval);
+    }, [dispatch])
+  );
 
   useEffect(() => {
     if (error) Alert.alert("Lỗi", error);
@@ -539,7 +607,7 @@ export default function MenuScreen({ navigation }) {
     }
   };
 
-  if (isLoading && drinks.length === 0) {
+  if (isLoading && resolvedDrinks.length === 0) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4b3621" />
@@ -566,7 +634,25 @@ export default function MenuScreen({ navigation }) {
           <Text style={styles.title}>Quản lý menu</Text>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <TouchableOpacity
+            onPress={handleManualReload}
+            style={[
+              styles.reloadBtn,
+              hasNewUpdates && styles.reloadBtnHighlight
+            ]}
+            activeOpacity={0.7}
+          >
+            <FontAwesome5 
+              name="sync" 
+              size={13} 
+              color={hasNewUpdates ? "#fff" : "#4b3621"} 
+            />
+            {hasNewUpdates && (
+              <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.addCategoryBtn} onPress={() => setCategoryModalVisible(true)}>
             <FontAwesome5 name="folder-plus" size={13} color="#4b3621" />
             <Text style={styles.addCategoryText}>Thêm danh mục</Text>
@@ -697,30 +783,32 @@ export default function MenuScreen({ navigation }) {
               </ScrollView>
             </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Trạng thái kinh doanh</Text>
-              <View style={styles.dropdownContainer}>
-                {["Đang bán", "Dừng bán"].map((status) => (
-                  <TouchableOpacity
-                    key={status}
-                    style={[
-                      styles.dropdownOption,
-                      trangThai === status && styles.dropdownOptionSelected,
-                    ]}
-                    onPress={() => setTrangThai(status)}
-                  >
-                    <Text
+            {editingDrink && (
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Trạng thái kinh doanh</Text>
+                <View style={styles.dropdownContainer}>
+                  {["Đang bán", "Dừng bán"].map((status) => (
+                    <TouchableOpacity
+                      key={status}
                       style={[
-                        styles.dropdownOptionText,
-                        trangThai === status && styles.dropdownOptionTextSelected,
+                        styles.dropdownOption,
+                        trangThai === status && styles.dropdownOptionSelected,
                       ]}
+                      onPress={() => setTrangThai(status)}
                     >
-                      {status}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.dropdownOptionText,
+                          trangThai === status && styles.dropdownOptionTextSelected,
+                        ]}
+                      >
+                        {status}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            </View>
+            )}
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Hình ảnh</Text>
@@ -1433,5 +1521,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 16,
     textAlign: "center",
+  },
+  reloadBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  reloadBtnHighlight: {
+    width: "auto",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    backgroundColor: "#e65100",
+    gap: 6,
+  },
+  reloadBtnText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
 });

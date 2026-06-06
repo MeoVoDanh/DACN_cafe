@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+import "./loadEnv.js";
 import express from "express";
 import cors from "cors";
 import authRoutes from "./routes/auth.js";
@@ -12,8 +12,7 @@ import canhanRoutes from "./routes/canhan.js";
 import path from "path";
 import multer from "multer";
 import payosRoutes from "./routes/payos.js";
-
-dotenv.config();
+import checkUpdatesRoutes from "./routes/checkUpdates.js";
 const app = express();
 
 app.use(cors());
@@ -43,6 +42,7 @@ app.use("/api/calam", calamRoutes);
 app.use("/api/hoadon", hoadonRoutes);
 app.use("/api/doanhthu", doanhthuRoutes);
 app.use("/api/canhan", canhanRoutes);
+app.use("/api/check-updates", checkUpdatesRoutes);
 app.use("/img", express.static("img"));
 const PORT = process.env.PORT || 3000;
 app.use("/img", express.static("img"));

@@ -1,15 +1,33 @@
 import db from "../config/db.js";
 
 export const getAllDanhMucService = async () => {
-  const [rows] = await db.query(`
-    SELECT maDanhMuc, tenDanhMuc, createdAt, updatedAt
-    FROM DanhMucDoUong
-    ORDER BY maDanhMuc ASC
-  `);
-  return {
-    statusCode: 200,
-    data: rows,
-  };
+  try {
+    const [rows] = await db.query(`
+      SELECT maDanhMuc, tenDanhMuc, createdAt, updatedAt
+      FROM DanhMucDoUong
+      ORDER BY maDanhMuc ASC
+    `);
+    return {
+      statusCode: 200,
+      data: rows,
+    };
+  } catch (error) {
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      // Fallback: get distinct categories from DoUong table
+      const [rows] = await db.query(`
+        SELECT DISTINCT danhMuc FROM DoUong WHERE danhMuc IS NOT NULL AND danhMuc != ''
+      `);
+      const formatted = rows.map((r, index) => ({
+        maDanhMuc: index + 1,
+        tenDanhMuc: r.danhMuc,
+      }));
+      return {
+        statusCode: 200,
+        data: formatted,
+      };
+    }
+    throw error;
+  }
 };
 
 export const createDanhMucService = async (data) => {
@@ -92,6 +110,29 @@ export const updateDanhMucService = async (maDanhMuc, data) => {
 };
 
 export const deleteDanhMucService = async (maDanhMuc) => {
+  // First, find the ID of 'Khác' category to reassign
+  let khacId = null;
+  try {
+    const [khacRows] = await db.query(
+      "SELECT maDanhMuc FROM DanhMucDoUong WHERE tenDanhMuc = 'Khác'"
+    );
+    if (khacRows.length > 0) {
+      khacId = khacRows[0].maDanhMuc;
+    }
+  } catch (err) {
+    console.log("Error finding 'Khác' category:", err.message);
+  }
+
+  // Reassign all drinks in the deleted category to 'Khác'
+  try {
+    await db.query("UPDATE DoUong SET danhMuc = ? WHERE danhMuc = ?", [
+      khacId,
+      maDanhMuc,
+    ]);
+  } catch (err) {
+    console.log("Error reassigning drinks to 'Khác':", err.message);
+  }
+
   const [result] = await db.query(
     "DELETE FROM DanhMucDoUong WHERE maDanhMuc = ?",
     [maDanhMuc],

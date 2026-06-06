@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { setStorageItem, removeStorageItem } from "../redux/storage";
 import api from "../redux/api";
 
 export const loginApi = async (tenDangNhap, matKhau) => {
@@ -9,15 +9,15 @@ export const loginApi = async (tenDangNhap, matKhau) => {
 
   const { token, user } = response.data;
 
-  await AsyncStorage.setItem("token", token);
-  await AsyncStorage.setItem("user", JSON.stringify(user));
+  await setStorageItem("token", token);
+  await setStorageItem("user", JSON.stringify(user));
 
   return response.data;
 };
 
 export const logoutApi = async () => {
-  await AsyncStorage.removeItem("token");
-  await AsyncStorage.removeItem("user");
+  await removeStorageItem("token");
+  await removeStorageItem("user");
 };
 
 export const getCurrentUserApi = async () => {

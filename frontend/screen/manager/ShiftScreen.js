@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   StyleSheet,
   Text,
@@ -13,20 +14,37 @@ import {
   TextInput,
   FlatList,
   StatusBar,
+  RefreshControl,
 } from "react-native";
 import { FontAwesome5 } from "@expo/vector-icons";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchShiftsByDate, saveShiftsByDate } from "../../redux/shiftSlice";
 import { fetchEmployees } from "../../redux/employeeSlice";
+import api from "../../redux/api";
+
 
 export default function ShiftScreen({ navigation }) {
   const dispatch = useDispatch();
+
+  const getLocalDateString = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const { shifts, isLoading, error } = useSelector((state) => state.shift);
   const { employees } = useSelector((state) => state.employee);
 
   // States
   const [ngayLam, setNgayLam] = useState("");
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
+  const [lastLoadedTime, setLastLoadedTime] = useState(0);
+  
+  const lastLoadedTimeRef = useRef(lastLoadedTime);
+  useEffect(() => {
+    lastLoadedTimeRef.current = lastLoadedTime;
+  }, [lastLoadedTime]);
   const [sangEmployees, setSangEmployees] = useState([]);
   const [chieuEmployees, setChieuEmployees] = useState([]);
   const [toiEmployees, setToiEmployees] = useState([]);
@@ -44,13 +62,65 @@ export default function ShiftScreen({ navigation }) {
     (emp) => emp.TrangThai === "Đang làm việc" && emp.vaiTro !== "Admin" && emp.vaiTro !== "admin"
   );
 
-  // Initial load
+  // Initial date setup
   useEffect(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getLocalDateString(new Date());
     setNgayLam(todayStr);
-    dispatch(fetchShiftsByDate(todayStr));
+  }, []);
+
+  const loadDataAndResetBadge = async (targetDate) => {
+    const dateQuery = targetDate || ngayLam || getLocalDateString(new Date());
+    dispatch(fetchShiftsByDate(dateQuery));
     dispatch(fetchEmployees());
-  }, [dispatch]);
+    try {
+      const res = await api.get("/check-updates");
+      setLastLoadedTime(res.data.shiftTime);
+      setHasNewUpdates(false);
+    } catch (err) {
+      console.log("Error checking updates:", err);
+    }
+  };
+
+  const handleManualReload = () => {
+    if (hasNewUpdates) {
+      if (Platform.OS === "web") {
+        const confirmReload = window.confirm("Có dữ liệu mới từ database. Tải lại sẽ làm mất các thay đổi chưa lưu. Bạn có muốn tải lại không?");
+        if (!confirmReload) return;
+      } else {
+        Alert.alert(
+          "Cập nhật mới",
+          "Có dữ liệu mới từ database. Tải lại sẽ làm mất các thay đổi chưa lưu. Bạn có muốn tải lại không?",
+          [
+            { text: "Hủy", style: "cancel" },
+            { text: "Tải lại", onPress: () => loadDataAndResetBadge() }
+          ]
+        );
+        return;
+      }
+    }
+    loadDataAndResetBadge();
+  };
+
+  // Fetch shifts when screen is focused and poll check-updates every 5 seconds
+  useFocusEffect(
+    useCallback(() => {
+      const targetDate = ngayLam || getLocalDateString(new Date());
+      loadDataAndResetBadge(targetDate);
+
+      const interval = setInterval(async () => {
+        try {
+          const res = await api.get("/check-updates");
+          if (res.data.shiftTime > lastLoadedTimeRef.current) {
+            setHasNewUpdates(true);
+          }
+        } catch (err) {
+          console.log("Error checking updates:", err);
+        }
+      }, 5000);
+
+      return () => clearInterval(interval);
+    }, [dispatch, ngayLam])
+  );
 
   // Sync loaded shifts into local state columns
   useEffect(() => {
@@ -86,13 +156,6 @@ export default function ShiftScreen({ navigation }) {
     setChieuGhiChu(chieuNote);
     setToiGhiChu(toiNote);
   }, [shifts]);
-
-  const getLocalDateString = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
   const handlePrevDay = () => {
     const parts = ngayLam.split("-");
@@ -206,10 +269,22 @@ export default function ShiftScreen({ navigation }) {
 
   const handleAddEmployee = (emp) => {
     if (activeShiftTarget === "Ca Sáng") {
+      if (sangEmployees.length >= 5) {
+        Alert.alert("Thông báo", "Ca sáng đã đạt giới hạn tối đa 5 người");
+        return;
+      }
       setSangEmployees([...sangEmployees, emp]);
     } else if (activeShiftTarget === "Ca Chiều") {
+      if (chieuEmployees.length >= 5) {
+        Alert.alert("Thông báo", "Ca chiều đã đạt giới hạn tối đa 5 người");
+        return;
+      }
       setChieuEmployees([...chieuEmployees, emp]);
     } else if (activeShiftTarget === "Ca Tối") {
+      if (toiEmployees.length >= 5) {
+        Alert.alert("Thông báo", "Ca tối đã đạt giới hạn tối đa 5 người");
+        return;
+      }
       setToiEmployees([...toiEmployees, emp]);
     }
     setEmployeePickerVisible(false);
@@ -253,7 +328,7 @@ export default function ShiftScreen({ navigation }) {
 
     if (saveShiftsByDate.fulfilled.match(result)) {
       Alert.alert("Thành công", "Lưu phân ca làm việc thành công!");
-      dispatch(fetchShiftsByDate(ngayLam.trim()));
+      loadDataAndResetBadge(ngayLam.trim());
     } else {
       Alert.alert("Lỗi", result.payload || "Lưu ca làm việc thất bại");
     }
@@ -297,6 +372,24 @@ export default function ShiftScreen({ navigation }) {
             <Text style={styles.title}>QUẢN LÝ CA LÀM</Text>
             <Text style={styles.subtitle}>Chọn ngày, sắp xếp phân ca và xác nhận lưu</Text>
           </View>
+
+          <TouchableOpacity
+            onPress={handleManualReload}
+            style={[
+              styles.reloadBtn,
+              hasNewUpdates && styles.reloadBtnHighlight
+            ]}
+            activeOpacity={0.7}
+          >
+            <FontAwesome5 
+              name="sync" 
+              size={14} 
+              color={hasNewUpdates ? "#fff" : "#4b3621"} 
+            />
+            {hasNewUpdates && (
+              <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Date Selector Row */}
@@ -347,6 +440,12 @@ export default function ShiftScreen({ navigation }) {
             style={styles.scrollContainer}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={true}
+            refreshControl={
+              <RefreshControl
+                refreshing={isLoading}
+                onRefresh={() => dispatch(fetchShiftsByDate(ngayLam))}
+              />
+            }
           >
             <View style={[styles.shiftsContainer, isWeb && styles.shiftsContainerWeb]}>
               {/* Shift 1: Ca Sáng */}
@@ -355,8 +454,16 @@ export default function ShiftScreen({ navigation }) {
                   <View style={[styles.shiftIconBox, { backgroundColor: "#FBC02D" }]}>
                     <FontAwesome5 name="sun" size={16} color="#fff" />
                   </View>
-                  <View>
-                    <Text style={styles.shiftCardTitle}>Ca Sáng</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={styles.shiftCardTitle}>Ca Sáng</Text>
+                      {sangEmployees.length < 3 && (
+                        <View style={styles.warningBadge}>
+                          <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                          <Text style={styles.warningBadgeText}>Thiếu người ({sangEmployees.length}/3)</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.shiftCardTime}>07:00 - 12:00 (5 tiếng)</Text>
                   </View>
                 </View>
@@ -389,8 +496,16 @@ export default function ShiftScreen({ navigation }) {
                   <View style={[styles.shiftIconBox, { backgroundColor: "#F57C00" }]}>
                     <FontAwesome5 name="cloud-sun" size={16} color="#fff" />
                   </View>
-                  <View>
-                    <Text style={styles.shiftCardTitle}>Ca Chiều</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={styles.shiftCardTitle}>Ca Chiều</Text>
+                      {chieuEmployees.length < 3 && (
+                        <View style={styles.warningBadge}>
+                          <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                          <Text style={styles.warningBadgeText}>Thiếu người ({chieuEmployees.length}/3)</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.shiftCardTime}>12:00 - 17:00 (5 tiếng)</Text>
                   </View>
                 </View>
@@ -423,8 +538,16 @@ export default function ShiftScreen({ navigation }) {
                   <View style={[styles.shiftIconBox, { backgroundColor: "#7B1FA2" }]}>
                     <FontAwesome5 name="moon" size={16} color="#fff" />
                   </View>
-                  <View>
-                    <Text style={styles.shiftCardTitle}>Ca Tối</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={styles.shiftCardTitle}>Ca Tối</Text>
+                      {toiEmployees.length < 3 && (
+                        <View style={styles.warningBadge}>
+                          <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                          <Text style={styles.warningBadgeText}>Thiếu người ({toiEmployees.length}/3)</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={styles.shiftCardTime}>17:00 - 22:00 (5 tiếng)</Text>
                   </View>
                 </View>
@@ -470,11 +593,11 @@ export default function ShiftScreen({ navigation }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chọn nhân viên ({activeShiftTarget})</Text>
-              <TouchableOpacity onPress={() => setEmployeePickerVisible(false)}>
-                <FontAwesome5 name="times" size={18} color="#4b3621" />
+            <View style={[styles.modalHeader, { justifyContent: "flex-start" }]}>
+              <TouchableOpacity onPress={() => setEmployeePickerVisible(false)} style={{ marginRight: 12, padding: 4 }}>
+                <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
               </TouchableOpacity>
+              <Text style={styles.modalTitle}>Chọn nhân viên ({activeShiftTarget})</Text>
             </View>
 
             {/* Search Input */}
@@ -913,5 +1036,41 @@ const styles = StyleSheet.create({
     color: "#4b3621",
     fontSize: 12,
     paddingVertical: 6,
+  },
+  warningBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF3E0",
+    borderColor: "#FFCCBC",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 3,
+  },
+  warningBadgeText: {
+    fontSize: 9,
+    fontWeight: "bold",
+    color: "#d84315",
+  },
+  reloadBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5ece3",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  reloadBtnHighlight: {
+    width: "auto",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    backgroundColor: "#e65100",
+    gap: 6,
+  },
+  reloadBtnText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
 });

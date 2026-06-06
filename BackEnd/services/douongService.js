@@ -4,9 +4,9 @@ const resolveDanhMucId = async (danhMucInput) => {
   if (!danhMucInput) {
     try {
       const [rows] = await db.query(
-        "SELECT maDanhMuc FROM DanhMucDoUong WHERE tenDanhMuc = 'Khác'",
+        "SELECT maDanhMuc AS danhMuc FROM DanhMucDoUong WHERE tenDanhMuc = 'Khác'",
       );
-      if (rows.length > 0) return rows[0].maDanhMuc;
+      if (rows.length > 0) return rows[0].danhMuc;
     } catch (error) {
       if (error.code === "ER_NO_SUCH_TABLE") {
         return null;
@@ -19,10 +19,10 @@ const resolveDanhMucId = async (danhMucInput) => {
   if (typeof danhMucInput === "number" || !isNaN(Number(danhMucInput))) {
     try {
       const [rows] = await db.query(
-        "SELECT maDanhMuc FROM DanhMucDoUong WHERE maDanhMuc = ?",
+        "SELECT maDanhMuc AS danhMuc FROM DanhMucDoUong WHERE maDanhMuc = ?",
         [Number(danhMucInput)],
       );
-      if (rows.length > 0) return rows[0].maDanhMuc;
+      if (rows.length > 0) return rows[0].danhMuc;
     } catch (error) {
       if (error.code === "ER_NO_SUCH_TABLE") {
         return null;
@@ -34,11 +34,11 @@ const resolveDanhMucId = async (danhMucInput) => {
   const categoryName = String(danhMucInput).trim();
   try {
     const [rows] = await db.query(
-      "SELECT maDanhMuc FROM DanhMucDoUong WHERE tenDanhMuc = ?",
+      "SELECT maDanhMuc AS danhMuc FROM DanhMucDoUong WHERE tenDanhMuc = ?",
       [categoryName],
     );
     if (rows.length > 0) {
-      return rows[0].maDanhMuc;
+      return rows[0].danhMuc;
     }
 
     const [result] = await db.query(
@@ -64,14 +64,38 @@ export const getAllDoUongService = async () => {
         du.moTa,
         du.hinhAnh,
         du.trangThai,
-        du.danhMuc
+        COALESCE(dm.tenDanhMuc, 'Khác') AS danhMuc,
+        du.danhMuc AS danhMucId
       FROM DoUong du
+      LEFT JOIN DanhMucDoUong dm ON du.danhMuc = dm.maDanhMuc
       ORDER BY du.maDoUong DESC
     `);
 
     return rows;
   } catch (error) {
-    throw error;
+    const missingCategoryTable =
+      error.code === "ER_NO_SUCH_TABLE" &&
+      String(error.sqlMessage || "")
+        .toLowerCase()
+        .includes("danhmucdouong");
+
+    if (!missingCategoryTable) {
+      throw error;
+    }
+
+    const [fallbackRows] = await db.query(`
+      SELECT 
+        du.maDoUong,
+        du.tenDoUong,
+        du.donGia,
+        du.moTa,
+        du.hinhAnh,
+        du.trangThai,
+        du.danhMuc
+      FROM DoUong du
+      ORDER BY du.maDoUong DESC
+    `);
+    return fallbackRows;
   }
 };
 
@@ -89,9 +113,9 @@ export const getDoUongByIdService = async (maDoUong) => {
         du.hinhAnh,
         du.trangThai,
         COALESCE(dm.tenDanhMuc, 'Khác') AS danhMuc,
-        du.maDanhMuc
+        du.danhMuc AS danhMucId
       FROM DoUong du
-      LEFT JOIN DanhMucDoUong dm ON du.maDanhMuc = dm.maDanhMuc
+      LEFT JOIN DanhMucDoUong dm ON du.danhMuc = dm.maDanhMuc
       WHERE du.maDoUong = ?
       `,
       [maDoUong],
@@ -118,7 +142,7 @@ export const getDoUongByIdService = async (maDoUong) => {
         du.hinhAnh,
         du.trangThai,
         'Khác' AS danhMuc,
-        du.maDanhMuc
+        du.danhMuc AS danhMucId
       FROM DoUong du
       WHERE du.maDoUong = ?
       `,
@@ -143,12 +167,12 @@ export const getDoUongByIdService = async (maDoUong) => {
 };
 
 export const createDoUongService = async (data) => {
-  const { tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc } = data;
-  const maDanhMuc = await resolveDanhMucId(danhMuc);
+  let { tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc } = data;
+  danhMuc = await resolveDanhMucId(danhMuc);
 
   const [result] = await db.query(
     `
-    INSERT INTO DoUong (tenDoUong, donGia, moTa, hinhAnh, trangThai, maDanhMuc)
+    INSERT INTO DoUong (tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc)
     VALUES (?, ?, ?, ?, ?, ?)
     `,
     [
@@ -157,7 +181,7 @@ export const createDoUongService = async (data) => {
       moTa || null,
       hinhAnh || null,
       trangThai || "Đang bán",
-      maDanhMuc,
+      danhMuc,
     ],
   );
 
@@ -171,13 +195,13 @@ export const createDoUongService = async (data) => {
 };
 
 export const updateDoUongService = async (maDoUong, data) => {
-  const { tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc } = data;
-  const maDanhMuc = await resolveDanhMucId(danhMuc);
+  let { tenDoUong, donGia, moTa, hinhAnh, trangThai, danhMuc } = data;
+  danhMuc = await resolveDanhMucId(danhMuc);
 
   const [result] = await db.query(
     `
     UPDATE DoUong
-    SET tenDoUong = ?, donGia = ?, moTa = ?, hinhAnh = ?, trangThai = ?, maDanhMuc = ?
+    SET tenDoUong = ?, donGia = ?, moTa = ?, hinhAnh = ?, trangThai = ?, danhMuc = ?
     WHERE maDoUong = ?
     `,
     [
@@ -186,7 +210,7 @@ export const updateDoUongService = async (maDoUong, data) => {
       moTa || null,
       hinhAnh || null,
       trangThai || "Đang bán",
-      maDanhMuc,
+      danhMuc,
       maDoUong,
     ],
   );

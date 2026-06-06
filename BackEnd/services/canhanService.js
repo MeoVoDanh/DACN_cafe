@@ -54,7 +54,8 @@ export const getCaLamCuaToiService = async (maNhanVien) => {
         WHEN trangThai = 'Chờ duyệt' THEN 1
         WHEN trangThai = 'Đã đăng ký' AND DATEDIFF(ngayLam, CURDATE()) >= 3 THEN 1
         ELSE 0
-      END AS coTheHuy
+      END AS coTheHuy,
+      (SELECT COUNT(*) FROM CaLamViec clv2 WHERE clv2.ngayLam = CaLamViec.ngayLam AND clv2.tenCa = CaLamViec.tenCa AND clv2.MaNhanVien IS NOT NULL) AS soNguoiDaDangKy
     FROM CaLamViec
     WHERE MaNhanVien = ?
     ORDER BY ngayLam DESC, gioBatDau DESC

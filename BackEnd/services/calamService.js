@@ -63,20 +63,20 @@ export const getCaLamConTrongService = async () => {
 
   const [rows] = await db.query(`
     SELECT 
-      maCa,
-      tenCa,
-      gioBatDau,
-      gioKetThuc,
-      ngayLam,
-      trangThai,
-      MaNhanVien,
-      ghiChu,
-      DATEDIFF(ngayLam, CURDATE()) AS soNgayConLai
-    FROM CaLamViec
-    WHERE MaNhanVien IS NULL
-      AND trangThai = 'Chưa có nhân viên'
-      AND ngayLam >= CURDATE()
-    ORDER BY ngayLam ASC, gioBatDau ASC
+      MIN(clv.maCa) AS maCa,
+      clv.tenCa,
+      MIN(clv.gioBatDau) AS gioBatDau,
+      MIN(clv.gioKetThuc) AS gioKetThuc,
+      clv.ngayLam,
+      'Chưa có nhân viên' AS trangThai,
+      NULL AS MaNhanVien,
+      DATEDIFF(clv.ngayLam, CURDATE()) AS soNgayConLai,
+      COUNT(clv.MaNhanVien) AS soNguoiDaDangKy
+    FROM CaLamViec clv
+    WHERE clv.ngayLam >= CURDATE()
+    GROUP BY clv.ngayLam, clv.tenCa
+    HAVING COUNT(clv.MaNhanVien) < 5
+    ORDER BY clv.ngayLam ASC, clv.tenCa ASC
   `);
 
   return {
@@ -147,35 +147,84 @@ export const dangKyCaLamService = async (maCa, maNhanVien) => {
     };
   }
 
-  const [result] = await db.query(
-    `
-    UPDATE CaLamViec
-    SET 
-      MaNhanVien = ?,
-      trangThai = 'Chờ duyệt'
-    WHERE maCa = ?
-      AND MaNhanVien IS NULL
-      AND trangThai = 'Chưa có nhân viên'
-      AND ngayLam >= CURDATE()
-    `,
-    [maNhanVien, maCa],
+  // 1. Lấy thông tin ca làm muốn đăng ký
+  const [shifts] = await db.query(
+    "SELECT tenCa, gioBatDau, gioKetThuc, ngayLam, MaNhanVien, trangThai FROM CaLamViec WHERE maCa = ?",
+    [maCa]
   );
 
-  if (result.affectedRows === 0) {
+  if (shifts.length === 0) {
+    return {
+      statusCode: 404,
+      data: { message: "Ca làm không tồn tại" },
+    };
+  }
+
+  const targetShift = shifts[0];
+  const { tenCa, ngayLam, gioBatDau, gioKetThuc } = targetShift;
+
+  // 2. Đếm số lượng nhân viên hiện tại đã đăng ký ca này vào ngày này (cả 'Chờ duyệt' và 'Đã đăng ký')
+  const [countRows] = await db.query(
+    `
+    SELECT COUNT(*) AS total 
+    FROM CaLamViec 
+    WHERE ngayLam = ? AND tenCa = ? AND MaNhanVien IS NOT NULL
+    `,
+    [ngayLam, tenCa]
+  );
+
+  const currentCount = countRows[0].total;
+
+  if (currentCount >= 5) {
     return {
       statusCode: 400,
-      data: {
-        message:
-          "Ca làm này không tồn tại, đã có người đăng ký hoặc đã quá hạn đăng ký",
-      },
+      data: { message: `Ca trực [${tenCa}] ngày hôm đó đã đạt giới hạn tối đa 5 người` },
     };
+  }
+
+  // 3. Kiểm tra xem nhân viên này đã đăng ký ca này vào ngày này chưa (tránh trùng)
+  const [existingReg] = await db.query(
+    `
+    SELECT maCa 
+    FROM CaLamViec 
+    WHERE ngayLam = ? AND tenCa = ? AND MaNhanVien = ?
+    `,
+    [ngayLam, tenCa, maNhanVien]
+  );
+
+  if (existingReg.length > 0) {
+    return {
+      statusCode: 400,
+      data: { message: "Bạn đã đăng ký ca này rồi" },
+    };
+  }
+
+  // 4. Nếu ca làm hiện tại chưa có nhân viên, update trực tiếp
+  if (targetShift.MaNhanVien === null) {
+    await db.query(
+      `
+      UPDATE CaLamViec
+      SET 
+        MaNhanVien = ?,
+        trangThai = 'Chờ duyệt'
+      WHERE maCa = ?
+      `,
+      [maNhanVien, maCa]
+    );
+  } else {
+    // Nếu ca hiện tại đã có nhân viên khác, tạo dòng mới (vì số lượng đang < 5)
+    await db.query(
+      `
+      INSERT INTO CaLamViec (tenCa, gioBatDau, gioKetThuc, ngayLam, trangThai, MaNhanVien)
+      VALUES (?, ?, ?, ?, 'Chờ duyệt', ?)
+      `,
+      [tenCa, gioBatDau, gioKetThuc, ngayLam, maNhanVien]
+    );
   }
 
   return {
     statusCode: 200,
-    data: {
-      message: "Đăng ký ca làm thành công, vui lòng chờ Admin phê duyệt",
-    },
+    data: { message: "Đăng ký ca làm thành công, vui lòng chờ Admin phê duyệt" },
   };
 };
 
@@ -455,7 +504,7 @@ export const saveCaLamByNgayService = async (ngayLam, shiftsData) => {
       }
     }
 
-    // 5. So sánh phân ca cũ và mới để gửi thông báo cho nhân viên bị xóa ca
+    // 5. So sánh phân ca cũ và mới để gửi thông báo cho nhân viên
     const formattedDate = new Date(ngayLam).toLocaleDateString("vi-VN");
     for (const oldShift of existingShifts) {
       // Tìm cấu hình ca mới tương ứng
@@ -466,9 +515,23 @@ export const saveCaLamByNgayService = async (ngayLam, shiftsData) => {
         newShiftData.employeeIds &&
         newShiftData.employeeIds.includes(oldShift.MaNhanVien);
 
-      if (!isStillAssigned) {
-        // Nhân viên đã bị xóa hoặc chuyển sang ca khác
-        const noiDungThongBao = `Ca trực [${oldShift.tenCa}] ngày [${formattedDate}] đã đăng ký của bạn đã bị Admin XÓA khỏi lịch làm việc.`;
+      if (isStillAssigned) {
+        // Nếu trước đó đang chờ duyệt, giờ được giữ lại thì đổi thành Đã duyệt (Đã đăng ký)
+        if (oldShift.trangThai === "Chờ duyệt") {
+          const noiDungThongBao = `Yêu cầu đăng ký ca trực [${oldShift.tenCa}] ngày [${formattedDate}] của bạn đã được PHÊ DUYỆT.`;
+          await connection.query(
+            `
+            INSERT INTO ThongBao (noiDung, MaNhanVien)
+            VALUES (?, ?)
+            `,
+            [noiDungThongBao, oldShift.MaNhanVien]
+          );
+        }
+      } else {
+        // Nhân viên đã bị xóa hoặc từ chối
+        const prefix = oldShift.trangThai === "Chờ duyệt" ? "Yêu cầu đăng ký ca trực" : `Ca trực`;
+        const action = oldShift.trangThai === "Chờ duyệt" ? "TỪ CHỐI" : "XÓA khỏi lịch làm việc";
+        const noiDungThongBao = `${prefix} [${oldShift.tenCa}] ngày [${formattedDate}] của bạn đã bị Admin ${action}.`;
         
         await connection.query(
           `

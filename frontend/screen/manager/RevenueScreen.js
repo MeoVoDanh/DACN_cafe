@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   StyleSheet,
   Text,
@@ -50,6 +51,13 @@ export default function RevenueScreen({ navigation }) {
 
   const todayStr = useMemo(() => getLocalDateString(new Date()), []);
   const [ngayLam, setNgayLam] = useState(todayStr);
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
+  const [lastLoadedTime, setLastLoadedTime] = useState(0);
+
+  const lastLoadedTimeRef = useRef(lastLoadedTime);
+  useEffect(() => {
+    lastLoadedTimeRef.current = lastLoadedTime;
+  }, [lastLoadedTime]);
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -64,9 +72,40 @@ export default function RevenueScreen({ navigation }) {
   const [invoiceDetails, setInvoiceDetails] = useState([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  useEffect(() => {
+  const loadDataAndResetBadge = async () => {
     dispatch(fetchInvoices());
-  }, [dispatch]);
+    try {
+      const res = await api.get("/check-updates");
+      setLastLoadedTime(res.data.revenueTime);
+      setHasNewUpdates(false);
+    } catch (err) {
+      console.log("Error checking updates:", err);
+    }
+  };
+
+  const handleManualReload = () => {
+    loadDataAndResetBadge();
+  };
+
+  // Fetch invoices when screen is focused and poll check-updates every 5 seconds
+  useFocusEffect(
+    useCallback(() => {
+      loadDataAndResetBadge();
+
+      const interval = setInterval(async () => {
+        try {
+          const res = await api.get("/check-updates");
+          if (res.data.revenueTime > lastLoadedTimeRef.current) {
+            setHasNewUpdates(true);
+          }
+        } catch (err) {
+          console.log("Error checking updates:", err);
+        }
+      }, 5000);
+
+      return () => clearInterval(interval);
+    }, [dispatch])
+  );
 
   const BASE_URL = api.defaults.baseURL.replace("/api", "");
 
@@ -355,8 +394,22 @@ export default function RevenueScreen({ navigation }) {
           <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
         </TouchableOpacity>
         <Text style={styles.title}>BÁO CÁO DOANH THU</Text>
-        <TouchableOpacity onPress={() => dispatch(fetchInvoices())} style={styles.refreshBtn}>
-          <FontAwesome5 name="sync-alt" size={16} color="#4b3621" />
+        <TouchableOpacity
+          onPress={handleManualReload}
+          style={[
+            styles.refreshBtn,
+            hasNewUpdates && styles.reloadBtnHighlight
+          ]}
+          activeOpacity={0.7}
+        >
+          <FontAwesome5 
+            name="sync-alt" 
+            size={14} 
+            color={hasNewUpdates ? "#fff" : "#4b3621"} 
+          />
+          {hasNewUpdates && (
+            <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -481,13 +534,13 @@ export default function RevenueScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.calendarModalContainer}>
             {/* Modal Header */}
-            <View style={styles.calendarHeader}>
+            <View style={[styles.calendarHeader, { justifyContent: "flex-start" }]}>
+              <TouchableOpacity onPress={() => setShowCalendar(false)} style={{ marginRight: 12, padding: 4 }}>
+                <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+              </TouchableOpacity>
               <Text style={styles.calendarTitle}>
                 Tháng {selectedMonth} / {selectedYear}
               </Text>
-              <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                <FontAwesome5 name="times" size={18} color="#4b3621" />
-              </TouchableOpacity>
             </View>
 
             {/* Week days header */}
@@ -589,7 +642,10 @@ export default function RevenueScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.detailsModalContainer}>
             {/* Header Modal */}
-            <View style={styles.detailsHeader}>
+            <View style={[styles.detailsHeader, { justifyContent: "flex-start" }]}>
+              <TouchableOpacity onPress={() => setShowDetails(false)} style={{ marginRight: 12, padding: 4 }}>
+                <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+              </TouchableOpacity>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <View style={styles.detailsIconCircle}>
                   <FontAwesome5 name="file-invoice" size={18} color="#fff" />
@@ -598,9 +654,6 @@ export default function RevenueScreen({ navigation }) {
                   Chi Tiết Đơn #{selectedInvoice?.maHoaDon}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowDetails(false)} style={styles.closeDetailsBtn}>
-                <FontAwesome5 name="times" size={18} color="#4b3621" />
-              </TouchableOpacity>
             </View>
 
             {/* Invoice summary info */}
@@ -1234,5 +1287,17 @@ const styles = StyleSheet.create({
     color: "#bbb",
     fontSize: 12,
     textAlign: "center",
+  },
+  reloadBtnHighlight: {
+    width: "auto",
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    backgroundColor: "#e65100",
+    gap: 6,
+  },
+  reloadBtnText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
 });

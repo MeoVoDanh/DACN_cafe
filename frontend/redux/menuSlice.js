@@ -14,7 +14,7 @@ export const fetchDrinks = createAsyncThunk(
   async (_, thunkAPI) => {
     try {
       const response = await api.get("/douong");
-      return response.data;
+      return response.data.data || [];
     } catch (error) {
       return thunkAPI.rejectWithValue(
         error.response?.data?.message || error.message || "Không lấy được menu",
@@ -144,7 +144,7 @@ const menuSlice = createSlice({
       })
       .addCase(fetchDrinks.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.drinks = action.payload;
+        state.drinks = Array.isArray(action.payload) ? action.payload : (action.payload?.data || []);
       })
       .addCase(fetchDrinks.rejected, (state, action) => {
         state.isLoading = false;

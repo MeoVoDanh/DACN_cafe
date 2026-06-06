@@ -352,13 +352,13 @@ export default function MyOrderCountScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.calendarModalContainer}>
             {/* Modal Header */}
-            <View style={styles.calendarHeader}>
+            <View style={[styles.calendarHeader, { justifyContent: "flex-start" }]}>
+              <TouchableOpacity onPress={() => setShowCalendar(false)} style={{ marginRight: 12, padding: 4 }}>
+                <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+              </TouchableOpacity>
               <Text style={styles.calendarTitle}>
                 Tháng {selectedMonth} / {selectedYear}
               </Text>
-              <TouchableOpacity onPress={() => setShowCalendar(false)}>
-                <FontAwesome5 name="times" size={18} color="#4b3621" />
-              </TouchableOpacity>
             </View>
 
             {/* Thứ trong tuần */}
@@ -442,7 +442,10 @@ export default function MyOrderCountScreen({ navigation }) {
         <View style={styles.modalOverlay}>
           <View style={styles.detailsModalContainer}>
             {/* Header Modal */}
-            <View style={styles.detailsHeader}>
+            <View style={[styles.detailsHeader, { justifyContent: "flex-start" }]}>
+              <TouchableOpacity onPress={() => setShowDetails(false)} style={{ marginRight: 12, padding: 4 }}>
+                <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+              </TouchableOpacity>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <View style={styles.detailsIconCircle}>
                   <FontAwesome5 name="receipt" size={18} color="#fff" />
@@ -451,9 +454,6 @@ export default function MyOrderCountScreen({ navigation }) {
                   Hóa đơn #{selectedInvoice?.maHoaDon}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowDetails(false)} style={styles.closeDetailsBtn}>
-                <FontAwesome5 name="times" size={18} color="#4b3621" />
-              </TouchableOpacity>
             </View>
 
             {/* Tóm tắt thông tin hóa đơn */}

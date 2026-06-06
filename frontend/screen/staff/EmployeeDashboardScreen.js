@@ -202,14 +202,17 @@ export default function EmployeeDashboardScreen({ navigation }) {
           >
             <View style={styles.modalOverlay}>
               <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
+                <View style={[styles.modalHeader, { justifyContent: "flex-start" }]}>
+                  <TouchableOpacity
+                    onPress={() => setNotificationModalVisible(false)}
+                    style={{ marginRight: 12, padding: 4 }}
+                  >
+                    <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+                  </TouchableOpacity>
                   <View style={{ flexDirection: "row", alignItems: "center" }}>
                     <FontAwesome5 name="bell" size={16} color="#4b3621" style={{ marginRight: 8 }} />
                     <Text style={styles.modalTitle}>Thông báo của tôi</Text>
                   </View>
-                  <TouchableOpacity onPress={() => setNotificationModalVisible(false)}>
-                    <FontAwesome5 name="times" size={18} color="#4b3621" />
-                  </TouchableOpacity>
                 </View>
 
                 {unreadCount > 0 && (
