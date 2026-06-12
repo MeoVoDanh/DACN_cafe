@@ -515,7 +515,7 @@ export default function EmployeeShiftScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.headerBox, { justifyContent: "space-between", flexWrap: "wrap", gap: 10 }]}>
+      <View style={[styles.headerBox, { justifyContent: "space-between", alignItems: "center", gap: 10 }]}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <TouchableOpacity
             onPress={() => navigation.navigate("EmployeeDashboardScreen")}
@@ -524,25 +524,22 @@ export default function EmployeeShiftScreen({ navigation }) {
             <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
           </TouchableOpacity>
           <Text style={styles.title}>Quản lý ca làm</Text>
-        </View>
-
-        <TouchableOpacity
-          onPress={handleManualReload}
-          style={[
-            styles.reloadBtn,
-            hasNewUpdates && styles.reloadBtnHighlight
-          ]}
-          activeOpacity={0.7}
-        >
-          <FontAwesome5 
-            name="sync" 
-            size={14} 
-            color={hasNewUpdates ? "#fff" : "#4b3621"} 
-          />
           {hasNewUpdates && (
-            <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
+            <View style={{
+              backgroundColor: "#ffe0b2",
+              borderRadius: 12,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              marginLeft: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4
+            }}>
+              <FontAwesome5 name="exclamation-circle" size={10} color="#e65100" />
+              <Text style={{ fontSize: 9, fontWeight: "bold", color: "#e65100" }}>Mới</Text>
+            </View>
           )}
-        </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.tabBox}>

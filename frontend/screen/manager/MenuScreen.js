@@ -15,6 +15,7 @@ import {
   Image,
   Platform,
   StatusBar,
+  RefreshControl,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -299,7 +300,7 @@ export default function MenuScreen({ navigation }) {
   const openEditModal = (drink) => {
     setEditingDrink(drink);
     setTenDoUong(drink.tenDoUong || "");
-    setDonGia(String(drink.donGia || ""));
+    setDonGia(drink.donGia ? Number(drink.donGia).toLocaleString("vi-VN") + "đ" : "");
     setMoTa(drink.moTa || "");
     setHinhAnh(drink.hinhAnh || "");
     setTrangThai(drink.trangThai || "Đang bán");
@@ -371,8 +372,9 @@ export default function MenuScreen({ navigation }) {
       return;
     }
 
-    const parsedPrice = Number(trimmedGia);
-    if (isNaN(parsedPrice) || parsedPrice < 0) {
+    const cleanGia = trimmedGia.replace(/[^0-9]/g, "");
+    const parsedPrice = Number(cleanGia);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
       Alert.alert("Thông báo", "Đơn giá phải là số dương hợp lệ");
       return;
     }
@@ -624,35 +626,19 @@ export default function MenuScreen({ navigation }) {
         translucent
       />
       <View style={styles.headerBox}>
-        <View style={styles.titleWrapper}>
-          <TouchableOpacity
-            onPress={() => navigation.navigate("DashboardScreen")}
-            style={styles.backBtn}
-          >
-            <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Quản lý menu</Text>
+        <View style={styles.headerTop}>
+          <View style={styles.titleWrapper}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("DashboardScreen")}
+              style={styles.backBtn}
+            >
+              <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Quản lý menu</Text>
+          </View>
         </View>
 
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <TouchableOpacity
-            onPress={handleManualReload}
-            style={[
-              styles.reloadBtn,
-              hasNewUpdates && styles.reloadBtnHighlight
-            ]}
-            activeOpacity={0.7}
-          >
-            <FontAwesome5 
-              name="sync" 
-              size={13} 
-              color={hasNewUpdates ? "#fff" : "#4b3621"} 
-            />
-            {hasNewUpdates && (
-              <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
-            )}
-          </TouchableOpacity>
-
+        <View style={styles.headerActions}>
           <TouchableOpacity style={styles.addCategoryBtn} onPress={() => setCategoryModalVisible(true)}>
             <FontAwesome5 name="folder-plus" size={13} color="#4b3621" />
             <Text style={styles.addCategoryText}>Thêm danh mục</Text>
@@ -718,6 +704,14 @@ export default function MenuScreen({ navigation }) {
         style={styles.list}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={loadDataAndResetBadge}
+            tintColor="#4b3621"
+            colors={["#4b3621"]}
+          />
+        }
       >
         {renderDrinksList()}
       </ScrollView>
@@ -737,7 +731,11 @@ export default function MenuScreen({ navigation }) {
             <Input
               label="Đơn giá"
               value={donGia}
-              onChangeText={setDonGia}
+              onChangeText={(text) => {
+                const clean = text.replace(/[^0-9]/g, "");
+                const num = parseFloat(clean) || 0;
+                setDonGia(clean ? num.toLocaleString("vi-VN") + "đ" : "");
+              }}
               keyboardType="numeric"
             />
             <Input label="Mô tả" value={moTa} onChangeText={setMoTa} />
@@ -930,18 +928,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f1e9",
     padding: 16,
     paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 24) + 12 : 16,
-    height: Platform.OS === "web" ? "100vh" : "100%",
-    maxHeight: Platform.OS === "web" ? "100vh" : "100%",
+    height: Platform.OS === "web" ? "100vh" : undefined,
+    maxHeight: Platform.OS === "web" ? "100vh" : undefined,
     overflow: "hidden",
   },
   list: {
     flex: 1,
   },
   headerBox: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: Platform.OS === "web" ? "row" : "column",
+    justifyContent: Platform.OS === "web" ? "space-between" : "flex-start",
+    alignItems: Platform.OS === "web" ? "center" : "stretch",
     marginBottom: 16,
+    gap: 12,
   },
   titleWrapper: {
     flexDirection: "row",
@@ -961,6 +960,19 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#4b3621",
   },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: Platform.OS === "web" ? "auto" : "100%",
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    width: Platform.OS === "web" ? "auto" : "100%",
+    justifyContent: Platform.OS === "web" ? "flex-end" : "space-between",
+  },
   addBtn: {
     flexDirection: "row",
     backgroundColor: "#4b3621",
@@ -968,7 +980,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
+    flex: Platform.OS === "web" ? 0 : 1,
   },
   addText: {
     color: "#fff",
@@ -1433,7 +1447,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
+    flex: Platform.OS === "web" ? 0 : 1,
   },
   addCategoryText: {
     color: "#4b3621",

@@ -1,5 +1,13 @@
 import db from "../config/db.js";
 
+const TOPPINGS_PRICES = {
+  tranchautrang: 5000,
+  tranchauden: 5000,
+  thachsinhto: 5000,
+  kemcheese: 10000,
+  hatsen: 10000,
+};
+
 export const getAllHoaDonService = async () => {
   const [rows] = await db.query(`
     SELECT 
@@ -54,11 +62,14 @@ export const getHoaDonByIdService = async (maHoaDon) => {
       cthd.maHoaDon,
       cthd.maDoUong,
       du.tenDoUong,
+      du.hinhAnh,
       cthd.soluong,
       cthd.dongia,
       cthd.thanhtien,
       cthd.duong,
-      cthd.da
+      cthd.da,
+      cthd.ghiChu,
+      cthd.toppings
     FROM ChiTietHoaDon cthd
     JOIN DoUong du ON cthd.maDoUong = du.maDoUong
     WHERE cthd.maHoaDon = ?
@@ -121,7 +132,16 @@ export const createHoaDonService = async (data, user) => {
       }
 
       const soluong = Number(item.soluong || 1);
-      const dongia = Number(drinkRows[0].donGia);
+      let toppingPrice = 0;
+      if (item.toppings) {
+        const toppingList = item.toppings.split(",").map((t) => t.trim());
+        for (const t of toppingList) {
+          if (TOPPINGS_PRICES[t]) {
+            toppingPrice += TOPPINGS_PRICES[t];
+          }
+        }
+      }
+      const dongia = Number(drinkRows[0].donGia) + toppingPrice;
       const thanhtien = soluong * dongia;
 
       tongtien += thanhtien;
@@ -133,6 +153,8 @@ export const createHoaDonService = async (data, user) => {
         thanhtien,
         duong: item.duong,
         da: item.da,
+        ghiChu: item.ghiChu || "",
+        toppings: item.toppings || "",
       });
     }
 
@@ -150,10 +172,19 @@ export const createHoaDonService = async (data, user) => {
       await connection.query(
         `
         INSERT INTO ChiTietHoaDon 
-        (maHoaDon, maDoUong, soluong, dongia, duong, da)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (maHoaDon, maDoUong, soluong, dongia, duong, da, ghiChu, toppings)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
-        [maHoaDon, item.maDoUong, item.soluong, item.dongia, item.duong || "100%", item.da || "100%"],
+        [
+          maHoaDon,
+          item.maDoUong,
+          item.soluong,
+          item.dongia,
+          item.duong || "100%",
+          item.da || "100%",
+          item.ghiChu || "",
+          item.toppings || "",
+        ],
       );
     }
 
@@ -342,7 +373,16 @@ export const updateHoaDonService = async (maHoaDon, data, user) => {
       }
 
       const soluong = Number(item.soluong || 1);
-      const dongia = Number(drinkRows[0].donGia);
+      let toppingPrice = 0;
+      if (item.toppings) {
+        const toppingList = item.toppings.split(",").map((t) => t.trim());
+        for (const t of toppingList) {
+          if (TOPPINGS_PRICES[t]) {
+            toppingPrice += TOPPINGS_PRICES[t];
+          }
+        }
+      }
+      const dongia = Number(drinkRows[0].donGia) + toppingPrice;
       const thanhtien = soluong * dongia;
 
       tongtien += thanhtien;
@@ -352,6 +392,8 @@ export const updateHoaDonService = async (maHoaDon, data, user) => {
         dongia,
         duong: item.duong,
         da: item.da,
+        ghiChu: item.ghiChu || "",
+        toppings: item.toppings || "",
       });
     }
 
@@ -364,8 +406,17 @@ export const updateHoaDonService = async (maHoaDon, data, user) => {
     // 4. Thêm chi tiết hóa đơn mới
     for (const item of chiTietItems) {
       await connection.query(
-        "INSERT INTO ChiTietHoaDon (maHoaDon, maDoUong, soluong, dongia, duong, da) VALUES (?, ?, ?, ?, ?, ?)",
-        [maHoaDon, item.maDoUong, item.soluong, item.dongia, item.duong || "100%", item.da || "100%"]
+        "INSERT INTO ChiTietHoaDon (maHoaDon, maDoUong, soluong, dongia, duong, da, ghiChu, toppings) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          maHoaDon,
+          item.maDoUong,
+          item.soluong,
+          item.dongia,
+          item.duong || "100%",
+          item.da || "100%",
+          item.ghiChu || "",
+          item.toppings || "",
+        ]
       );
     }
 

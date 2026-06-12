@@ -15,6 +15,6 @@ router.get(
   authorizeRoles("Admin"),
   getDoanhThuTheoNgay,
 );
-router.get("/top-do-uong", verifyToken, authorizeRoles("Admin"), getTopDoUong);
+router.get("/top-do-uong", verifyToken, authorizeRoles("Admin", "NhanVien"), getTopDoUong);
 
 export default router;

@@ -11,6 +11,8 @@ import {
   Modal,
   Platform,
   StatusBar,
+  Image,
+  RefreshControl,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchInvoices } from "../../redux/invoiceSlice";
@@ -45,6 +47,27 @@ const formatDate = (value) => {
   return `${hh}:${mm}:${ss} - ${d}/${m}/${y}`;
 };
 
+const TOPPINGS = [
+  { id: "tranchautrang", name: "Trân châu trắng", price: 5000 },
+  { id: "tranchauden", name: "Trân châu đen", price: 5000 },
+  { id: "thachsinhto", name: "Thạch trái cây", price: 5000 },
+  { id: "kemcheese", name: "Kem Cheese", price: 10000 },
+  { id: "hatsen", name: "Hạt sen", price: 10000 },
+];
+
+const getToppingsDisplayName = (toppingsString) => {
+  if (!toppingsString) return "";
+  const toppingList = toppingsString.split(",");
+  const names = toppingList
+    .map((t) => {
+      const found = TOPPINGS.find((top) => top.id === t);
+      return found ? found.name : "";
+    })
+    .filter(Boolean);
+  return names.length > 0 ? ` + Topping: ${names.join(", ")}` : "";
+};
+
+
 export default function RevenueScreen({ navigation }) {
   const dispatch = useDispatch();
   const { invoices, isLoading } = useSelector((state) => state.invoice);
@@ -71,6 +94,10 @@ export default function RevenueScreen({ navigation }) {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceDetails, setInvoiceDetails] = useState([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [activeTab, setActiveTab] = useState("info"); // "info" or "items"
+  
+  // Top selling drinks state
+  const [topDrinks, setTopDrinks] = useState([]);
 
   const loadDataAndResetBadge = async () => {
     dispatch(fetchInvoices());
@@ -80,6 +107,15 @@ export default function RevenueScreen({ navigation }) {
       setHasNewUpdates(false);
     } catch (err) {
       console.log("Error checking updates:", err);
+    }
+
+    try {
+      const topRes = await api.get("/doanhthu/top-do-uong");
+      if (topRes.data) {
+        setTopDrinks(topRes.data);
+      }
+    } catch (err) {
+      console.log("Error fetching top drinks:", err);
     }
   };
 
@@ -274,6 +310,7 @@ export default function RevenueScreen({ navigation }) {
   const handleViewInvoiceDetails = async (invoice) => {
     setSelectedInvoice(invoice);
     setInvoiceDetails([]);
+    setActiveTab("info");
     setLoadingDetails(true);
     setShowDetails(true);
     
@@ -394,26 +431,36 @@ export default function RevenueScreen({ navigation }) {
           <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
         </TouchableOpacity>
         <Text style={styles.title}>BÁO CÁO DOANH THU</Text>
-        <TouchableOpacity
-          onPress={handleManualReload}
-          style={[
-            styles.refreshBtn,
-            hasNewUpdates && styles.reloadBtnHighlight
-          ]}
-          activeOpacity={0.7}
-        >
-          <FontAwesome5 
-            name="sync-alt" 
-            size={14} 
-            color={hasNewUpdates ? "#fff" : "#4b3621"} 
-          />
-          {hasNewUpdates && (
-            <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
-          )}
-        </TouchableOpacity>
+        {hasNewUpdates ? (
+          <View style={{
+            backgroundColor: "#ffe0b2",
+            borderRadius: 12,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4
+          }}>
+            <FontAwesome5 name="exclamation-circle" size={10} color="#e65100" />
+            <Text style={{ fontSize: 9, fontWeight: "bold", color: "#e65100" }}>Mới</Text>
+          </View>
+        ) : (
+          <View style={{ width: 36 }} />
+        )}
       </View>
 
-      <ScrollView style={styles.mainContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.mainContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={loadDataAndResetBadge}
+            tintColor="#4b3621"
+            colors={["#4b3621"]}
+          />
+        }
+      >
         {/* PREMIUM DATE SELECTOR */}
         <Text style={styles.sectionTitle}>Chọn ngày làm việc</Text>
         <View style={styles.dateSelectorContainer}>
@@ -468,6 +515,40 @@ export default function RevenueScreen({ navigation }) {
             </Text>
           </View>
         </View>
+
+        {/* BESTSELLERS SECTION */}
+        <Text style={styles.sectionTitle}>Món bán chạy nhất (Bestseller)</Text>
+        {topDrinks.length === 0 ? (
+          <View style={styles.bestsellerEmptyCard}>
+            <Text style={styles.bestsellerEmptyText}>Chưa có dữ liệu bán hàng</Text>
+          </View>
+        ) : (
+          <View style={styles.bestsellersCard}>
+            {topDrinks.slice(0, 3).map((item, index) => (
+              <View key={item.maDoUong} style={styles.bestsellerRow}>
+                <View style={styles.bestsellerRankBox}>
+                  <Text style={[
+                    styles.bestsellerRankText,
+                    index === 0 ? styles.rank1 : index === 1 ? styles.rank2 : index === 2 ? styles.rank3 : null
+                  ]}>
+                    #{index + 1}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.bestsellerName}>{item.tenDoUong}</Text>
+                  <Text style={styles.bestsellerQuantity}>
+                    Đã bán: <Text style={{fontWeight: "bold", color: "#4b3621"}}>{item.tongSoLuongBan} ly</Text>
+                  </Text>
+                </View>
+                <View style={styles.bestsellerBadge}>
+                  <Text style={styles.bestsellerBadgeText}>
+                    {index === 0 ? "🔥 Bán chạy nhất" : "⭐ Hot"}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* SHIFTS BREAKDOWN SECTION */}
         <Text style={styles.sectionTitle}>Báo cáo chi tiết theo Ca</Text>
@@ -675,12 +756,14 @@ export default function RevenueScreen({ navigation }) {
                   </Text>
                 </View>
               </View>
+              <Text style={[styles.detailsSummaryText, { marginTop: 4 }]}>
+                <FontAwesome5 name="wallet" size={11} color="#8d6e63" /> <Text style={{fontWeight: "bold"}}>Phương thức:</Text> {selectedInvoice?.phuongThuc === "TienMat" ? "Tiền mặt" : selectedInvoice?.phuongThuc === "ChuyenKhoan" ? "Chuyển khoản" : "Chưa rõ"}
+              </Text>
             </View>
 
             <View style={styles.detailsDivider} />
             <Text style={styles.detailsListTitle}>DANH SÁCH MÓN ĐÃ BÁN</Text>
 
-            {/* List of items in invoice */}
             {loadingDetails ? (
               <View style={styles.detailsLoader}>
                 <ActivityIndicator size="large" color="#4b3621" />
@@ -693,24 +776,37 @@ export default function RevenueScreen({ navigation }) {
               </View>
             ) : (
               <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={true}>
-                {invoiceDetails.map((drink, idx) => (
-                  <View key={`${drink.maDoUong}-${idx}`} style={styles.detailItemRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.detailItemName}>{drink.tenDoUong}</Text>
-                      {drink.duong && drink.da && (
-                        <Text style={{ fontSize: 11, color: "#8d6e63", marginTop: 2 }}>
-                          Ghi chú: {drink.duong} đường, {drink.da} đá
-                        </Text>
+                {invoiceDetails.map((drink, idx) => {
+                  const imageUrl = drink.hinhAnh ? `${BASE_URL}/img/${drink.hinhAnh}` : null;
+                  return (
+                    <View key={`${drink.maDoUong}-${idx}`} style={styles.detailRow}>
+                      {imageUrl ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={styles.detailDrinkImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.detailDrinkPlaceholder}>
+                          <FontAwesome5 name="coffee" size={18} color="#8d6e63" />
+                        </View>
                       )}
-                      <Text style={styles.detailItemSub}>
-                        Số lượng: <Text style={{ fontWeight: "bold", color: "#4b3621" }}>{drink.soluong}</Text> x {Number(drink.dongia).toLocaleString("vi-VN")}đ
+
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.detailDrinkName}>{drink.tenDoUong}</Text>
+                        <Text style={styles.detailDrinkOptions}>
+                          Tùy chọn: {drink.duong} đường, {drink.da} đá{drink.ghiChu ? ` | Ghi chú: ${drink.ghiChu}` : ""}{getToppingsDisplayName(drink.toppings)}
+                        </Text>
+                        <Text style={styles.detailDrinkPrice}>
+                          {drink.soluong} x {Number(drink.dongia).toLocaleString("vi-VN")}đ
+                        </Text>
+                      </View>
+                      <Text style={styles.detailRowTotal}>
+                        {Number(drink.thanhtien).toLocaleString("vi-VN")}đ
                       </Text>
                     </View>
-                    <Text style={styles.detailItemTotal}>
-                      {Number(drink.thanhtien).toLocaleString("vi-VN")}đ
-                    </Text>
-                  </View>
-                ))}
+                  );
+                })}
               </ScrollView>
             )}
 
@@ -1299,5 +1395,156 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "bold",
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f5ece3",
+  },
+  detailDrinkImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  detailDrinkPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginRight: 10,
+    backgroundColor: "#efebe9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailDrinkName: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4b3621",
+  },
+  detailDrinkOptions: {
+    fontSize: 11,
+    color: "#8d6e63",
+    marginTop: 2,
+  },
+  detailDrinkPrice: {
+    fontSize: 12,
+    color: "#4b3621",
+    marginTop: 2,
+  },
+  detailRowTotal: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4b3621",
+    marginLeft: 8,
+  },
+  modalTabRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#f5ece3",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    gap: 4,
+  },
+  modalTabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+  },
+  modalTabBtnActive: {
+    backgroundColor: "#4b3621",
+  },
+  modalTabText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#8d6e63",
+  },
+  modalTabTextActive: {
+    color: "#fff",
+  },
+  bestsellerEmptyCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  bestsellerEmptyText: {
+    color: "#8d6e63",
+    fontSize: 14,
+    fontStyle: "italic",
+  },
+  bestsellersCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    marginHorizontal: 16,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  bestsellerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f5ece3",
+  },
+  bestsellerRankBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f8f1e9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bestsellerRankText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#8d6e63",
+  },
+  rank1: {
+    color: "#d32f2f",
+  },
+  rank2: {
+    color: "#f57c00",
+  },
+  rank3: {
+    color: "#fbc02d",
+  },
+  bestsellerName: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4b3621",
+  },
+  bestsellerQuantity: {
+    fontSize: 12,
+    color: "#8d6e63",
+    marginTop: 2,
+  },
+  bestsellerBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#fbe9e7",
+  },
+  bestsellerBadgeText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: "#d32f2f",
   },
 });

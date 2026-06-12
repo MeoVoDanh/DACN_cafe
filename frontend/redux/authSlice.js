@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { setStorageItem, removeStorageItem } from "./storage";
+import { getStorageItem, setStorageItem, removeStorageItem } from "./storage";
 import api from "./api";
 
 const initialState = {
@@ -8,6 +8,7 @@ const initialState = {
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  isRestoringSession: true,
 };
 
 export const loginUser = createAsyncThunk(
@@ -36,6 +37,23 @@ export const loginUser = createAsyncThunk(
   },
 );
 
+export const restoreSession = createAsyncThunk(
+  "auth/restoreSession",
+  async (_, thunkAPI) => {
+    try {
+      const token = await getStorageItem("token");
+      const userStr = await getStorageItem("user");
+      if (token && userStr) {
+        const user = JSON.parse(userStr);
+        return { token, user };
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  },
+);
+
 const authSlice = createSlice({
   name: "auth",
   initialState,
@@ -50,6 +68,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.isLoading = false;
       state.error = null;
+      state.isRestoringSession = false;
 
       removeStorageItem("token");
       removeStorageItem("user");
@@ -57,6 +76,21 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      .addCase(restoreSession.pending, (state) => {
+        state.isRestoringSession = true;
+      })
+      .addCase(restoreSession.fulfilled, (state, action) => {
+        state.isRestoringSession = false;
+        if (action.payload) {
+          state.isAuthenticated = true;
+          state.token = action.payload.token;
+          state.user = action.payload.user;
+          state.error = null;
+        }
+      })
+      .addCase(restoreSession.rejected, (state) => {
+        state.isRestoringSession = false;
+      })
       .addCase(loginUser.pending, (state) => {
         state.isLoading = true;
         state.error = null;

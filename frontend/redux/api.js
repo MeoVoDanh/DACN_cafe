@@ -3,7 +3,7 @@ import { getStorageItem } from "./storage";
 
 //dùng trên máy mình thì chỉ dùng localhost
 //con sài trên điện thoại thì dùng địa chị ip của máy và tắt firewall
-const API_BASE_URL = "http://192.168.1.39:3000/api";
+const API_BASE_URL = "http://192.168.1.36:3000/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

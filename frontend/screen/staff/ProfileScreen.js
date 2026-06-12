@@ -154,7 +154,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           <Text style={styles.name}>{profile?.HoTen || "Chưa có họ tên"}</Text>
-          <Text style={styles.role}>{profile?.vaiTro || "Nhân viên"}</Text>
+          <Text style={styles.role}>{profile?.vaiTro === "Admin" ? "Quản lý" : "Nhân viên"}</Text>
 
           <View style={styles.infoBox}>
             <InfoRow label="Tên đăng nhập" value={profile?.tenDangNhap} />

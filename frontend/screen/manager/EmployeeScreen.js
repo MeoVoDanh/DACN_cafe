@@ -35,9 +35,10 @@ export default function EmployeeScreen({ navigation, route }) {
   const [SoCCCD, setSoCCCD] = useState("");
   const [tenDangNhap, setTenDangNhap] = useState("");
   const [MatKhau, setMatKhau] = useState("");
-  const [vaiTro, setVaiTro] = useState("Pha chế");
+  const [vaiTro, setVaiTro] = useState("NhanVien");
   const [TrangThai, setTrangThai] = useState("Đang làm việc");
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (isEditMode && employee) {
@@ -46,31 +47,69 @@ export default function EmployeeScreen({ navigation, route }) {
       setSDT(employee.SDT || "");
       setSoCCCD(employee.SoCCCD || "");
       setTenDangNhap(employee.tenDangNhap || "");
-      setVaiTro(employee.vaiTro || "NhanVien");
+      
+      // Normalize role if not Admin or NhanVien
+      let role = employee.vaiTro || "NhanVien";
+      if (role !== "Admin" && role !== "NhanVien") {
+        role = "NhanVien";
+      }
+      setVaiTro(role);
+      
       setTrangThai(employee.TrangThai || "Đang làm việc");
     }
   }, [isEditMode, employee]);
 
   const handleSubmit = async () => {
+    const newErrors = {};
+
     if (!HoTen.trim()) {
-      Alert.alert("Thông báo", "Họ tên không được để trống");
-      return;
+      newErrors.HoTen = "Họ tên không được để trống";
+    }
+
+    let emailTrimmed = Email.trim();
+    if (!emailTrimmed) {
+      newErrors.Email = "Email không được để trống";
+    } else {
+      // Tự động thêm đuôi mặc định @dacncafe.com nếu không nhập ký tự '@'
+      if (!emailTrimmed.includes("@")) {
+        emailTrimmed = emailTrimmed + "@dacncafe.com";
+      }
+      const emailRegex = /^[^\s@]+@dacncafe\.com$/;
+      if (!emailRegex.test(emailTrimmed)) {
+        newErrors.Email = "Email không đúng định dạng (phải kết thúc bằng @dacncafe.com)";
+      }
+    }
+
+    const sdtTrimmed = SDT.trim();
+    if (!sdtTrimmed) {
+      newErrors.SDT = "Số điện thoại không được để trống";
+    } else {
+      const phoneRegex = /^0[0-9]{9}$/;
+      if (!phoneRegex.test(sdtTrimmed)) {
+        newErrors.SDT = "Số điện thoại không đúng định dạng (phải có 10 chữ số và bắt đầu bằng số 0)";
+      }
     }
 
     if (!isEditMode && !tenDangNhap.trim()) {
-      Alert.alert("Thông báo", "Tên đăng nhập không được để trống");
-      return;
+      newErrors.tenDangNhap = "Tên đăng nhập không được để trống";
     }
 
     if (!isEditMode && !MatKhau.trim()) {
-      Alert.alert("Thông báo", "Mật khẩu không được để trống");
+      newErrors.MatKhau = "Mật khẩu không được để trống";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      Alert.alert("Thông báo", "Vui lòng kiểm tra lại các thông tin nhập lỗi");
       return;
     }
 
+    setErrors({});
+
     const employeeData = {
       HoTen: HoTen.trim(),
-      Email: Email.trim(),
-      SDT: SDT.trim(),
+      Email: emailTrimmed,
+      SDT: sdtTrimmed,
       SoCCCD: SoCCCD.trim(),
       TrangThai,
       vaiTro,
@@ -133,33 +172,45 @@ export default function EmployeeScreen({ navigation, route }) {
         <View style={styles.formGroup}>
           <Text style={styles.label}>Họ tên</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.HoTen && styles.inputError]}
             value={HoTen}
-            onChangeText={setHoTen}
+            onChangeText={(text) => {
+              setHoTen(text);
+              if (errors.HoTen) setErrors({ ...errors, HoTen: null });
+            }}
             placeholder="Nhập họ tên nhân viên"
           />
+          {errors.HoTen && <Text style={styles.errorText}>{errors.HoTen}</Text>}
         </View>
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.Email && styles.inputError]}
             value={Email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (errors.Email) setErrors({ ...errors, Email: null });
+            }}
             placeholder="Nhập email"
             autoCapitalize="none"
           />
+          {errors.Email && <Text style={styles.errorText}>{errors.Email}</Text>}
         </View>
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>Số điện thoại</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.SDT && styles.inputError]}
             value={SDT}
-            onChangeText={setSDT}
+            onChangeText={(text) => {
+              setSDT(text);
+              if (errors.SDT) setErrors({ ...errors, SDT: null });
+            }}
             placeholder="Nhập số điện thoại"
             keyboardType="phone-pad"
           />
+          {errors.SDT && <Text style={styles.errorText}>{errors.SDT}</Text>}
         </View>
 
         <View style={styles.formGroup}>
@@ -178,23 +229,31 @@ export default function EmployeeScreen({ navigation, route }) {
             <View style={styles.formGroup}>
               <Text style={styles.label}>Tên đăng nhập</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, errors.tenDangNhap && styles.inputError]}
                 value={tenDangNhap}
-                onChangeText={setTenDangNhap}
+                onChangeText={(text) => {
+                  setTenDangNhap(text);
+                  if (errors.tenDangNhap) setErrors({ ...errors, tenDangNhap: null });
+                }}
                 placeholder="Nhập tên đăng nhập"
                 autoCapitalize="none"
               />
+              {errors.tenDangNhap && <Text style={styles.errorText}>{errors.tenDangNhap}</Text>}
             </View>
 
             <View style={styles.formGroup}>
               <Text style={styles.label}>Mật khẩu</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, errors.MatKhau && styles.inputError]}
                 value={MatKhau}
-                onChangeText={setMatKhau}
+                onChangeText={(text) => {
+                  setMatKhau(text);
+                  if (errors.MatKhau) setErrors({ ...errors, MatKhau: null });
+                }}
                 placeholder="Nhập mật khẩu"
                 secureTextEntry
               />
+              {errors.MatKhau && <Text style={styles.errorText}>{errors.MatKhau}</Text>}
             </View>
           </>
         )}
@@ -203,32 +262,30 @@ export default function EmployeeScreen({ navigation, route }) {
           <Text style={styles.label}>Vai trò</Text>
           <View style={styles.roleGrid}>
             {(() => {
-              const roles = ["Pha chế", "Thu ngân", "Phục vụ", "Tạp vụ"];
-              if (vaiTro === "Admin") {
-                roles.unshift("Admin");
-              } else if (vaiTro === "NhanVien") {
-                roles.unshift("NhanVien");
-              }
-              return roles.map((role) => {
+              const roles = [
+                { value: "NhanVien", label: "Nhân viên" },
+                { value: "Admin", label: "Quản lý" }
+              ];
+              return roles.map((roleObj) => {
                 const isDisabled = employee?.vaiTro === "Admin";
                 return (
                   <TouchableOpacity
-                    key={role}
+                    key={roleObj.value}
                     style={[
                       styles.roleGridBtn,
-                      vaiTro === role && styles.roleGridBtnActive,
+                      vaiTro === roleObj.value && styles.roleGridBtnActive,
                       isDisabled && { opacity: 0.6 }
                     ]}
-                    onPress={() => setVaiTro(role)}
+                    onPress={() => setVaiTro(roleObj.value)}
                     disabled={isDisabled}
                   >
                     <Text
                       style={[
                         styles.roleGridBtnText,
-                        vaiTro === role && styles.roleGridBtnTextActive,
+                        vaiTro === roleObj.value && styles.roleGridBtnTextActive,
                       ]}
                     >
-                      {role === "NhanVien" ? "Nhân viên" : role}
+                      {roleObj.label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -518,6 +575,15 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     color: "#fff",
+    fontWeight: "bold",
+  },
+  inputError: {
+    borderColor: "#d32f2f",
+  },
+  errorText: {
+    color: "#d32f2f",
+    fontSize: 11,
+    marginTop: 4,
     fontWeight: "bold",
   },
 });

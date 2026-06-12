@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { NavigationContainer } from "@react-navigation/native";
-import { createStackNavigator } from "@react-navigation/stack";
-import { useSelector } from "react-redux";
+import { createStackNavigator, CardStyleInterpolators } from "@react-navigation/stack";
+import { useSelector, useDispatch } from "react-redux";
+import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { restoreSession } from "../redux/authSlice";
 
 import LoginScreen from "../screen/LoginScreen";
 
@@ -22,11 +24,31 @@ import ProfileScreen from "../screen/staff/ProfileScreen";
 const Stack = createStackNavigator();
 
 const AppNavigator = () => {
-  const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
+  const { isAuthenticated, user, isRestoringSession } = useSelector((state) => state.auth);
+
+  useEffect(() => {
+    dispatch(restoreSession());
+  }, [dispatch]);
+
+  if (isRestoringSession) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4b3621" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS,
+          gestureEnabled: true,
+          gestureDirection: "horizontal",
+        }}
+      >
         {!isAuthenticated ? (
           <Stack.Screen name="LoginScreen" component={LoginScreen} />
         ) : user?.vaiTro === "Admin" ? (
@@ -36,7 +58,6 @@ const AppNavigator = () => {
             <Stack.Screen
               name="EmployeeListScreen"
               component={EmployeeListScreen}
-              options={{ headerShown: true, title: "Danh sách nhân viên" }}
             />
 
             <Stack.Screen name="EmployeeScreen" component={EmployeeScreen} />
@@ -81,5 +102,14 @@ const AppNavigator = () => {
     </NavigationContainer>
   );
 };
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8f1e9",
+  },
+});
 
 export default AppNavigator;

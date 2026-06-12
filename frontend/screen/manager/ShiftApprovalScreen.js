@@ -121,7 +121,7 @@ export default function ShiftApprovalScreen({ navigation }) {
             <View>
               <Text style={styles.infoLabel}>Nhân viên đăng ký:</Text>
               <Text style={styles.infoValue}>
-                {item.HoTen} <Text style={styles.roleValue}>({item.vaiTro})</Text>
+                {item.HoTen} <Text style={styles.roleValue}>({item.vaiTro === "Admin" ? "Quản lý" : "Nhân viên"})</Text>
               </Text>
             </View>
           </View>

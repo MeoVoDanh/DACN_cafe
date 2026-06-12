@@ -100,9 +100,18 @@ export const createNhanVienService = async (data) => {
     await connection.rollback();
 
     if (error.code === "ER_DUP_ENTRY") {
+      const msg = error.sqlMessage || "";
+      let message = "Thông tin bị trùng lặp";
+      if (msg.includes("Email")) {
+        message = "Email đã tồn tại trên hệ thống";
+      } else if (msg.includes("SoCCCD")) {
+        message = "Số CCCD đã tồn tại trên hệ thống";
+      } else if (msg.includes("tenDangNhap")) {
+        message = "Tên đăng nhập đã tồn tại";
+      }
       return {
         statusCode: 409,
-        data: { message: "Tên đăng nhập đã tồn tại" },
+        data: { message },
       };
     }
 
@@ -118,45 +127,64 @@ export const updateNhanVienService = async (maNhanVien, data) => {
   // Tự động Khóa tài khoản nếu cho nghỉ việc, ngược lại kích hoạt HoatDong
   const accountStatus = TrangThai === "Đã nghỉ việc" ? "Khoa" : "HoatDong";
 
-  const [result] = await db.query(
-    `
-    UPDATE NhanVien nv
-    JOIN TaiKhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
-    SET 
-      nv.HoTen = ?,
-      nv.Email = ?,
-      nv.SDT = ?,
-      nv.SoCCCD = ?,
-      nv.TrangThai = ?,
-      tk.vaiTro = ?,
-      nv.HinhAnh = ?,
-      tk.trangThai = ?
-    WHERE nv.MaNhanVien = ?
-    `,
-    [
-      HoTen,
-      Email || null,
-      SDT || null,
-      SoCCCD || null,
-      TrangThai || "Đang làm việc",
-      vaiTro || "NhanVien",
-      HinhAnh || null,
-      accountStatus,
-      maNhanVien,
-    ],
-  );
+  try {
+    const [result] = await db.query(
+      `
+      UPDATE NhanVien nv
+      JOIN TaiKhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
+      SET 
+        nv.HoTen = ?,
+        nv.Email = ?,
+        nv.SDT = ?,
+        nv.SoCCCD = ?,
+        nv.TrangThai = ?,
+        tk.vaiTro = ?,
+        nv.HinhAnh = ?,
+        tk.trangThai = ?
+      WHERE nv.MaNhanVien = ?
+      `,
+      [
+        HoTen,
+        Email || null,
+        SDT || null,
+        SoCCCD || null,
+        TrangThai || "Đang làm việc",
+        vaiTro || "NhanVien",
+        HinhAnh || null,
+        accountStatus,
+        maNhanVien,
+      ],
+    );
 
-  if (result.affectedRows === 0) {
+    if (result.affectedRows === 0) {
+      return {
+        statusCode: 404,
+        data: { message: "Không tìm thấy nhân viên để cập nhật" },
+      };
+    }
+
     return {
-      statusCode: 404,
-      data: { message: "Không tìm thấy nhân viên để cập nhật" },
+      statusCode: 200,
+      data: { message: "Cập nhật nhân viên thành công" },
     };
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      const msg = error.sqlMessage || "";
+      let message = "Thông tin bị trùng lặp";
+      if (msg.includes("Email")) {
+        message = "Email đã tồn tại trên hệ thống";
+      } else if (msg.includes("SoCCCD")) {
+        message = "Số CCCD đã tồn tại trên hệ thống";
+      } else if (msg.includes("tenDangNhap")) {
+        message = "Tên đăng nhập đã tồn tại";
+      }
+      return {
+        statusCode: 409,
+        data: { message },
+      };
+    }
+    throw error;
   }
-
-  return {
-    statusCode: 200,
-    data: { message: "Cập nhật nhân viên thành công" },
-  };
 };
 
 export const deleteNhanVienService = async (maNhanVien) => {

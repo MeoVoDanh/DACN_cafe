@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
+  Image,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchInvoices } from "../../redux/invoiceSlice";
@@ -25,8 +26,29 @@ const getLocalDateString = (value) => {
   return `${y}-${m}-${d}`;
 };
 
+const TOPPINGS = [
+  { id: "tranchautrang", name: "Trân châu trắng", price: 5000 },
+  { id: "tranchauden", name: "Trân châu đen", price: 5000 },
+  { id: "thachsinhto", name: "Thạch trái cây", price: 5000 },
+  { id: "kemcheese", name: "Kem Cheese", price: 10000 },
+  { id: "hatsen", name: "Hạt sen", price: 10000 },
+];
+
+const getToppingsDisplayName = (toppingsString) => {
+  if (!toppingsString) return "";
+  const toppingList = toppingsString.split(",");
+  const names = toppingList
+    .map((t) => {
+      const found = TOPPINGS.find((top) => top.id === t);
+      return found ? found.name : "";
+    })
+    .filter(Boolean);
+  return names.length > 0 ? ` + Topping: ${names.join(", ")}` : "";
+};
+
 export default function MyOrderCountScreen({ navigation }) {
   const dispatch = useDispatch();
+  const BASE_URL = api.defaults.baseURL.replace("/api", "");
 
   const { invoices, isLoading } = useSelector((state) => state.invoice);
   const { user } = useSelector((state) => state.auth);
@@ -45,6 +67,7 @@ export default function MyOrderCountScreen({ navigation }) {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceDetails, setInvoiceDetails] = useState([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [activeTab, setActiveTab] = useState("info"); // "info" or "items"
 
   useEffect(() => {
     dispatch(fetchInvoices());
@@ -170,6 +193,7 @@ export default function MyOrderCountScreen({ navigation }) {
   const handleViewInvoiceDetails = async (invoice) => {
     setSelectedInvoice(invoice);
     setInvoiceDetails([]);
+    setActiveTab("info");
     setLoadingDetails(true);
     setShowDetails(true);
     
@@ -467,12 +491,14 @@ export default function MyOrderCountScreen({ navigation }) {
                   <Text style={styles.statusText}>{selectedInvoice?.trangthaithanhtoan}</Text>
                 </View>
               </View>
+              <Text style={[styles.detailsSummaryText, { marginTop: 4 }]}>
+                <FontAwesome5 name="wallet" size={11} color="#8d6e63" /> <Text style={{fontWeight: "bold"}}>Phương thức:</Text> {selectedInvoice?.phuongThuc === "TienMat" ? "Tiền mặt" : selectedInvoice?.phuongThuc === "ChuyenKhoan" ? "Chuyển khoản" : "Chưa rõ"}
+              </Text>
             </View>
 
             <View style={styles.detailsDivider} />
             <Text style={styles.detailsListTitle}>DANH SÁCH MÓN ĐÃ BÁN</Text>
 
-            {/* Danh sách món ăn chi tiết */}
             {loadingDetails ? (
               <View style={styles.detailsLoader}>
                 <ActivityIndicator size="large" color="#4b3621" />
@@ -485,24 +511,37 @@ export default function MyOrderCountScreen({ navigation }) {
               </View>
             ) : (
               <ScrollView style={styles.detailsScroll} showsVerticalScrollIndicator={true}>
-                {invoiceDetails.map((drink, idx) => (
-                  <View key={`${drink.maDoUong}-${idx}`} style={styles.detailItemRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.detailItemName}>{drink.tenDoUong}</Text>
-                      {drink.duong && drink.da && (
-                        <Text style={{ fontSize: 11, color: "#8d6e63", marginTop: 2 }}>
-                          Ghi chú: {drink.duong} đường, {drink.da} đá
-                        </Text>
+                {invoiceDetails.map((drink, idx) => {
+                  const imageUrl = drink.hinhAnh ? `${BASE_URL}/img/${drink.hinhAnh}` : null;
+                  return (
+                    <View key={`${drink.maDoUong}-${idx}`} style={styles.detailRow}>
+                      {imageUrl ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={styles.detailDrinkImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.detailDrinkPlaceholder}>
+                          <FontAwesome5 name="coffee" size={18} color="#8d6e63" />
+                        </View>
                       )}
-                      <Text style={styles.detailItemSub}>
-                        Số lượng: <Text style={{ fontWeight: "bold", color: "#4b3621" }}>{drink.soluong}</Text> x {Number(drink.dongia).toLocaleString("vi-VN")}đ
+
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.detailDrinkName}>{drink.tenDoUong}</Text>
+                        <Text style={styles.detailDrinkOptions}>
+                          Tùy chọn: {drink.duong} đường, {drink.da} đá{drink.ghiChu ? ` | Ghi chú: ${drink.ghiChu}` : ""}{getToppingsDisplayName(drink.toppings)}
+                        </Text>
+                        <Text style={styles.detailDrinkPrice}>
+                          {drink.soluong} x {Number(drink.dongia).toLocaleString("vi-VN")}đ
+                        </Text>
+                      </View>
+                      <Text style={styles.detailRowTotal}>
+                        {Number(drink.thanhtien).toLocaleString("vi-VN")}đ
                       </Text>
                     </View>
-                    <Text style={styles.detailItemTotal}>
-                      {Number(drink.thanhtien).toLocaleString("vi-VN")}đ
-                    </Text>
-                  </View>
-                ))}
+                  );
+                })}
               </ScrollView>
             )}
 
@@ -1028,5 +1067,76 @@ const styles = StyleSheet.create({
     color: "#bbb",
     fontSize: 12,
     textAlign: "center",
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f5ece3",
+  },
+  detailDrinkImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginRight: 10,
+  },
+  detailDrinkPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    marginRight: 10,
+    backgroundColor: "#efebe9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailDrinkName: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4b3621",
+  },
+  detailDrinkOptions: {
+    fontSize: 11,
+    color: "#8d6e63",
+    marginTop: 2,
+  },
+  detailDrinkPrice: {
+    fontSize: 12,
+    color: "#4b3621",
+    marginTop: 2,
+  },
+  detailRowTotal: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4b3621",
+    marginLeft: 8,
+  },
+  modalTabRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#f5ece3",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    gap: 4,
+  },
+  modalTabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+  },
+  modalTabBtnActive: {
+    backgroundColor: "#4b3621",
+  },
+  modalTabText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#8d6e63",
+  },
+  modalTabTextActive: {
+    color: "#fff",
   },
 });

@@ -33,6 +33,24 @@ export default function ShiftScreen({ navigation }) {
     return `${year}-${month}-${day}`;
   };
 
+  const isShiftPassed = (shiftName, dateStr) => {
+    if (!dateStr) return false;
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return false;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    
+    let endHour = 12;
+    if (shiftName === "Ca Chiều") {
+      endHour = 17;
+    } else if (shiftName === "Ca Tối") {
+      endHour = 22;
+    }
+    const shiftEndTime = new Date(year, month, day, endHour, 0, 0, 0);
+    return new Date() > shiftEndTime;
+  };
+
   const { shifts, isLoading, error } = useSelector((state) => state.shift);
   const { employees } = useSelector((state) => state.employee);
 
@@ -255,6 +273,10 @@ export default function ShiftScreen({ navigation }) {
   };
 
   const handleOpenPicker = (shiftName) => {
+    if (isShiftPassed(shiftName, ngayLam)) {
+      Alert.alert("Thông báo", "Ca làm việc này đã kết thúc, không thể chỉnh sửa.");
+      return;
+    }
     setActiveShiftTarget(shiftName);
     setSearchQuery("");
     setEmployeePickerVisible(true);
@@ -268,6 +290,10 @@ export default function ShiftScreen({ navigation }) {
   };
 
   const handleAddEmployee = (emp) => {
+    if (isShiftPassed(activeShiftTarget, ngayLam)) {
+      Alert.alert("Thông báo", "Ca làm việc này đã kết thúc, không thể chỉnh sửa.");
+      return;
+    }
     if (activeShiftTarget === "Ca Sáng") {
       if (sangEmployees.length >= 5) {
         Alert.alert("Thông báo", "Ca sáng đã đạt giới hạn tối đa 5 người");
@@ -291,6 +317,10 @@ export default function ShiftScreen({ navigation }) {
   };
 
   const handleRemoveEmployee = (shiftName, empId) => {
+    if (isShiftPassed(shiftName, ngayLam)) {
+      Alert.alert("Thông báo", "Ca làm việc này đã kết thúc, không thể chỉnh sửa.");
+      return;
+    }
     if (shiftName === "Ca Sáng") {
       setSangEmployees(sangEmployees.filter((e) => e.MaNhanVien !== empId));
     } else if (shiftName === "Ca Chiều") {
@@ -303,6 +333,16 @@ export default function ShiftScreen({ navigation }) {
   const handleSaveAll = async () => {
     if (!ngayLam.trim()) {
       Alert.alert("Thông báo", "Vui lòng chọn ngày hợp lệ trước khi lưu");
+      return;
+    }
+
+    const isSangPassed = isShiftPassed("Ca Sáng", ngayLam);
+    const isChieuPassed = isShiftPassed("Ca Chiều", ngayLam);
+    const isToiPassed = isShiftPassed("Ca Tối", ngayLam);
+    const allShiftsPassed = isSangPassed && isChieuPassed && isToiPassed;
+
+    if (allShiftsPassed) {
+      Alert.alert("Thông báo", "Tất cả các ca trực trong ngày đã kết thúc, không thể lưu.");
       return;
     }
 
@@ -335,7 +375,7 @@ export default function ShiftScreen({ navigation }) {
   };
 
   const getRoleDisplayName = (role) => {
-    if (role === "Admin") return "Quản lý (Admin)";
+    if (role === "Admin") return "Quản lý";
     if (role === "NhanVien") return "Nhân viên";
     return role || "Nhân viên";
   };
@@ -348,6 +388,11 @@ export default function ShiftScreen({ navigation }) {
     if (!searchQuery.trim()) return true;
     return emp.HoTen.toLowerCase().includes(searchQuery.toLowerCase());
   });
+
+  const isSangPassed = isShiftPassed("Ca Sáng", ngayLam);
+  const isChieuPassed = isShiftPassed("Ca Chiều", ngayLam);
+  const isToiPassed = isShiftPassed("Ca Tối", ngayLam);
+  const allShiftsPassed = isSangPassed && isChieuPassed && isToiPassed;
 
   const isWeb = Platform.OS === "web";
 
@@ -370,26 +415,14 @@ export default function ShiftScreen({ navigation }) {
 
           <View style={styles.headerTextBox}>
             <Text style={styles.title}>QUẢN LÝ CA LÀM</Text>
-            <Text style={styles.subtitle}>Chọn ngày, sắp xếp phân ca và xác nhận lưu</Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={handleManualReload}
-            style={[
-              styles.reloadBtn,
-              hasNewUpdates && styles.reloadBtnHighlight
-            ]}
-            activeOpacity={0.7}
-          >
-            <FontAwesome5 
-              name="sync" 
-              size={14} 
-              color={hasNewUpdates ? "#fff" : "#4b3621"} 
-            />
-            {hasNewUpdates && (
-              <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
+            {hasNewUpdates ? (
+              <Text style={[styles.subtitle, { color: "#e65100", fontWeight: "bold" }]}>
+                ⚠️ Có cập nhật mới (vuốt xuống để tải lại)
+              </Text>
+            ) : (
+              <Text style={styles.subtitle}>Chọn ngày, sắp xếp phân ca và xác nhận lưu</Text>
             )}
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Date Selector Row */}
@@ -443,7 +476,9 @@ export default function ShiftScreen({ navigation }) {
             refreshControl={
               <RefreshControl
                 refreshing={isLoading}
-                onRefresh={() => dispatch(fetchShiftsByDate(ngayLam))}
+                onRefresh={() => loadDataAndResetBadge(ngayLam)}
+                tintColor="#4b3621"
+                colors={["#4b3621"]}
               />
             }
           >
@@ -457,11 +492,18 @@ export default function ShiftScreen({ navigation }) {
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <Text style={styles.shiftCardTitle}>Ca Sáng</Text>
-                      {sangEmployees.length < 3 && (
-                        <View style={styles.warningBadge}>
-                          <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
-                          <Text style={styles.warningBadgeText}>Thiếu người ({sangEmployees.length}/3)</Text>
+                      {isSangPassed ? (
+                        <View style={styles.endedBadge}>
+                          <FontAwesome5 name="lock" size={9} color="#c62828" />
+                          <Text style={styles.endedBadgeText}>Đã kết thúc</Text>
                         </View>
+                      ) : (
+                        sangEmployees.length < 3 && (
+                          <View style={styles.warningBadge}>
+                            <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                            <Text style={styles.warningBadgeText}>Thiếu người ({sangEmployees.length}/3)</Text>
+                          </View>
+                        )
                       )}
                     </View>
                     <Text style={styles.shiftCardTime}>07:00 - 12:00 (5 tiếng)</Text>
@@ -470,23 +512,34 @@ export default function ShiftScreen({ navigation }) {
                 
                 <View style={styles.shiftCardBody}>
                   {renderEmployeesTable("Ca Sáng", sangEmployees)}
-                  <View style={styles.noteInputWrapper}>
-                    <FontAwesome5 name="edit" size={12} color="#8d6e63" style={styles.noteIcon} />
+                  <View style={[
+                    styles.noteInputWrapper,
+                    isSangPassed && styles.noteInputWrapperDisabled
+                  ]}>
+                    <FontAwesome5
+                      name={isSangPassed ? "lock" : "edit"}
+                      size={12}
+                      color={isSangPassed ? "#bdc3c7" : "#8d6e63"}
+                      style={styles.noteIcon}
+                    />
                     <TextInput
-                      style={styles.noteInput}
+                      style={[styles.noteInput, isSangPassed && { color: "#888" }]}
                       value={sangGhiChu}
                       onChangeText={setSangGhiChu}
                       placeholder="Thêm ghi chú ca sáng..."
                       placeholderTextColor="#aaa"
+                      editable={!isSangPassed}
                     />
                   </View>
-                  <TouchableOpacity
-                    style={styles.addEmpBtn}
-                    onPress={() => handleOpenPicker("Ca Sáng")}
-                  >
-                    <FontAwesome5 name="plus" size={11} color="#4b3621" style={{ marginRight: 6 }} />
-                    <Text style={styles.addEmpBtnText}>Thêm nhân viên</Text>
-                  </TouchableOpacity>
+                  {!isSangPassed && (
+                    <TouchableOpacity
+                      style={styles.addEmpBtn}
+                      onPress={() => handleOpenPicker("Ca Sáng")}
+                    >
+                      <FontAwesome5 name="plus" size={11} color="#4b3621" style={{ marginRight: 6 }} />
+                      <Text style={styles.addEmpBtnText}>Thêm nhân viên</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 
@@ -499,11 +552,18 @@ export default function ShiftScreen({ navigation }) {
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <Text style={styles.shiftCardTitle}>Ca Chiều</Text>
-                      {chieuEmployees.length < 3 && (
-                        <View style={styles.warningBadge}>
-                          <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
-                          <Text style={styles.warningBadgeText}>Thiếu người ({chieuEmployees.length}/3)</Text>
+                      {isChieuPassed ? (
+                        <View style={styles.endedBadge}>
+                          <FontAwesome5 name="lock" size={9} color="#c62828" />
+                          <Text style={styles.endedBadgeText}>Đã kết thúc</Text>
                         </View>
+                      ) : (
+                        chieuEmployees.length < 3 && (
+                          <View style={styles.warningBadge}>
+                            <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                            <Text style={styles.warningBadgeText}>Thiếu người ({chieuEmployees.length}/3)</Text>
+                          </View>
+                        )
                       )}
                     </View>
                     <Text style={styles.shiftCardTime}>12:00 - 17:00 (5 tiếng)</Text>
@@ -512,23 +572,34 @@ export default function ShiftScreen({ navigation }) {
 
                 <View style={styles.shiftCardBody}>
                   {renderEmployeesTable("Ca Chiều", chieuEmployees)}
-                  <View style={styles.noteInputWrapper}>
-                    <FontAwesome5 name="edit" size={12} color="#8d6e63" style={styles.noteIcon} />
+                  <View style={[
+                    styles.noteInputWrapper,
+                    isChieuPassed && styles.noteInputWrapperDisabled
+                  ]}>
+                    <FontAwesome5
+                      name={isChieuPassed ? "lock" : "edit"}
+                      size={12}
+                      color={isChieuPassed ? "#bdc3c7" : "#8d6e63"}
+                      style={styles.noteIcon}
+                    />
                     <TextInput
-                      style={styles.noteInput}
+                      style={[styles.noteInput, isChieuPassed && { color: "#888" }]}
                       value={chieuGhiChu}
                       onChangeText={setChieuGhiChu}
                       placeholder="Thêm ghi chú ca chiều..."
                       placeholderTextColor="#aaa"
+                      editable={!isChieuPassed}
                     />
                   </View>
-                  <TouchableOpacity
-                    style={styles.addEmpBtn}
-                    onPress={() => handleOpenPicker("Ca Chiều")}
-                  >
-                    <FontAwesome5 name="plus" size={11} color="#4b3621" style={{ marginRight: 6 }} />
-                    <Text style={styles.addEmpBtnText}>Thêm nhân viên</Text>
-                  </TouchableOpacity>
+                  {!isChieuPassed && (
+                    <TouchableOpacity
+                      style={styles.addEmpBtn}
+                      onPress={() => handleOpenPicker("Ca Chiều")}
+                    >
+                      <FontAwesome5 name="plus" size={11} color="#4b3621" style={{ marginRight: 6 }} />
+                      <Text style={styles.addEmpBtnText}>Thêm nhân viên</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 
@@ -541,11 +612,18 @@ export default function ShiftScreen({ navigation }) {
                   <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <Text style={styles.shiftCardTitle}>Ca Tối</Text>
-                      {toiEmployees.length < 3 && (
-                        <View style={styles.warningBadge}>
-                          <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
-                          <Text style={styles.warningBadgeText}>Thiếu người ({toiEmployees.length}/3)</Text>
+                      {isToiPassed ? (
+                        <View style={styles.endedBadge}>
+                          <FontAwesome5 name="lock" size={9} color="#c62828" />
+                          <Text style={styles.endedBadgeText}>Đã kết thúc</Text>
                         </View>
+                      ) : (
+                        toiEmployees.length < 3 && (
+                          <View style={styles.warningBadge}>
+                            <FontAwesome5 name="exclamation-circle" size={9} color="#d84315" />
+                            <Text style={styles.warningBadgeText}>Thiếu người ({toiEmployees.length}/3)</Text>
+                          </View>
+                        )
                       )}
                     </View>
                     <Text style={styles.shiftCardTime}>17:00 - 22:00 (5 tiếng)</Text>
@@ -554,31 +632,54 @@ export default function ShiftScreen({ navigation }) {
 
                 <View style={styles.shiftCardBody}>
                   {renderEmployeesTable("Ca Tối", toiEmployees)}
-                  <View style={styles.noteInputWrapper}>
-                    <FontAwesome5 name="edit" size={12} color="#8d6e63" style={styles.noteIcon} />
+                  <View style={[
+                    styles.noteInputWrapper,
+                    isToiPassed && styles.noteInputWrapperDisabled
+                  ]}>
+                    <FontAwesome5
+                      name={isToiPassed ? "lock" : "edit"}
+                      size={12}
+                      color={isToiPassed ? "#bdc3c7" : "#8d6e63"}
+                      style={styles.noteIcon}
+                    />
                     <TextInput
-                      style={styles.noteInput}
+                      style={[styles.noteInput, isToiPassed && { color: "#888" }]}
                       value={toiGhiChu}
                       onChangeText={setToiGhiChu}
                       placeholder="Thêm ghi chú ca tối..."
                       placeholderTextColor="#aaa"
+                      editable={!isToiPassed}
                     />
                   </View>
-                  <TouchableOpacity
-                    style={styles.addEmpBtn}
-                    onPress={() => handleOpenPicker("Ca Tối")}
-                  >
-                    <FontAwesome5 name="plus" size={11} color="#4b3621" style={{ marginRight: 6 }} />
-                    <Text style={styles.addEmpBtnText}>Thêm nhân viên</Text>
-                  </TouchableOpacity>
+                  {!isToiPassed && (
+                    <TouchableOpacity
+                      style={styles.addEmpBtn}
+                      onPress={() => handleOpenPicker("Ca Tối")}
+                    >
+                      <FontAwesome5 name="plus" size={11} color="#4b3621" style={{ marginRight: 6 }} />
+                      <Text style={styles.addEmpBtnText}>Thêm nhân viên</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </View>
 
             {/* Confirm Save Button */}
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveAll}>
-              <FontAwesome5 name="check" size={14} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.saveBtnText}>Xác nhận & Lưu ca</Text>
+            <TouchableOpacity
+              style={[styles.saveBtn, allShiftsPassed && styles.saveBtnDisabled]}
+              onPress={allShiftsPassed ? null : handleSaveAll}
+              disabled={allShiftsPassed}
+              activeOpacity={allShiftsPassed ? 1 : 0.7}
+            >
+              <FontAwesome5
+                name={allShiftsPassed ? "lock" : "check"}
+                size={14}
+                color="#fff"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.saveBtnText}>
+                {allShiftsPassed ? "Ca trực đã kết thúc (Đóng)" : "Xác nhận & Lưu ca"}
+              </Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -645,13 +746,14 @@ export default function ShiftScreen({ navigation }) {
   );
 
   function renderEmployeesTable(shiftName, list) {
+    const isPassed = isShiftPassed(shiftName, ngayLam);
     return (
       <View style={styles.table}>
         {/* Table Header */}
         <View style={styles.tableHeader}>
-          <Text style={[styles.th, { flex: 2 }]}>Nhân viên</Text>
-          <Text style={[styles.th, { flex: 1.5 }]}>Vai trò</Text>
-          <Text style={[styles.th, { flex: 0.8, textAlign: "center" }]}>Xóa</Text>
+          <Text style={[styles.th, { flex: isPassed ? 2.3 : 2 }]}>Nhân viên</Text>
+          <Text style={[styles.th, { flex: isPassed ? 2 : 1.5 }]}>Vai trò</Text>
+          {!isPassed && <Text style={[styles.th, { flex: 0.8, textAlign: "center" }]}>Xóa</Text>}
         </View>
 
         {/* Table Content */}
@@ -662,20 +764,22 @@ export default function ShiftScreen({ navigation }) {
         ) : (
           list.map((emp) => (
             <View key={emp.MaNhanVien} style={styles.tr}>
-              <Text style={[styles.td, { flex: 2, fontWeight: "bold" }]} numberOfLines={1}>
+              <Text style={[styles.td, { flex: isPassed ? 2.3 : 2, fontWeight: "bold" }]} numberOfLines={1}>
                 {emp.HoTen}
               </Text>
-              <Text style={[styles.td, { flex: 1.5 }]} numberOfLines={1}>
+              <Text style={[styles.td, { flex: isPassed ? 2 : 1.5 }]} numberOfLines={1}>
                 {getRoleDisplayName(emp.vaiTro)}
               </Text>
-              <TouchableOpacity
-                style={[styles.td, { flex: 0.8, alignItems: "center" }]}
-                onPress={() => handleRemoveEmployee(shiftName, emp.MaNhanVien)}
-              >
-                <View style={styles.removeIconBox}>
-                  <FontAwesome5 name="trash-alt" size={11} color="#d32f2f" />
-                </View>
-              </TouchableOpacity>
+              {!isPassed && (
+                <TouchableOpacity
+                  style={[styles.td, { flex: 0.8, alignItems: "center" }]}
+                  onPress={() => handleRemoveEmployee(shiftName, emp.MaNhanVien)}
+                >
+                  <View style={styles.removeIconBox}>
+                    <FontAwesome5 name="trash-alt" size={11} color="#d32f2f" />
+                  </View>
+                </TouchableOpacity>
+              )}
             </View>
           ))
         )}
@@ -1072,5 +1176,31 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "bold",
+  },
+  endedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ffebee",
+    borderColor: "#ffcdd2",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    gap: 3,
+  },
+  endedBadgeText: {
+    fontSize: 9,
+    fontWeight: "bold",
+    color: "#c62828",
+  },
+  noteInputWrapperDisabled: {
+    backgroundColor: "#f5ece3",
+    borderColor: "#e3d5c5",
+    opacity: 0.8,
+  },
+  saveBtnDisabled: {
+    backgroundColor: "#bdc3c7",
+    elevation: 0,
+    shadowOpacity: 0,
   },
 });

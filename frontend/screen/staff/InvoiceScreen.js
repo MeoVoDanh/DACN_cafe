@@ -15,6 +15,8 @@ import {
   TextInput,
   Image,
   Linking,
+  KeyboardAvoidingView,
+  RefreshControl,
 } from "react-native";
 import QRCodeLib from "qrcode";
 import QRCodeSvg from "react-native-qrcode-svg";
@@ -34,6 +36,26 @@ import {
   createPayosPayment,
   getPayosPaymentStatus,
 } from "../../services/payosService";
+
+const TOPPINGS = [
+  { id: "tranchautrang", name: "Trân châu trắng", price: 5000 },
+  { id: "tranchauden", name: "Trân châu đen", price: 5000 },
+  { id: "thachsinhto", name: "Thạch trái cây", price: 5000 },
+  { id: "kemcheese", name: "Kem Cheese", price: 10000 },
+  { id: "hatsen", name: "Hạt sen", price: 10000 },
+];
+
+const getToppingsDisplayName = (toppingsString) => {
+  if (!toppingsString) return "";
+  const toppingList = toppingsString.split(",");
+  const names = toppingList
+    .map((t) => {
+      const found = TOPPINGS.find((top) => top.id === t);
+      return found ? found.name : "";
+    })
+    .filter(Boolean);
+  return names.length > 0 ? ` + Topping: ${names.join(", ")}` : "";
+};
 
 export default function InvoiceScreen({ navigation }) {
   const dispatch = useDispatch();
@@ -80,6 +102,17 @@ export default function InvoiceScreen({ navigation }) {
   const [customizingDrink, setCustomizingDrink] = useState(null);
   const [selectedDuong, setSelectedDuong] = useState("100%");
   const [selectedDa, setSelectedDa] = useState("100%");
+  const [note, setNote] = useState("");
+  const [selectedToppings, setSelectedToppings] = useState([]);
+  const [editingCartItemIndex, setEditingCartItemIndex] = useState(null);
+
+  // Detail Modal States
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedDetailInvoice, setSelectedDetailInvoice] = useState(null);
+  const [detailItems, setDetailItems] = useState([]);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailActiveTab, setDetailActiveTab] = useState("info"); // "info" or "items"
+
 
   // Payment States
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
@@ -93,6 +126,8 @@ export default function InvoiceScreen({ navigation }) {
   const [payosCheckoutUrl, setPayosCheckoutUrl] = useState("");
   const [payosOrderCode, setPayosOrderCode] = useState(null);
   const payosPollingRef = useRef(null);
+  const [bestsellerIds, setBestsellerIds] = useState([]);
+
   const loadDataAndResetBadge = async () => {
     dispatch(fetchInvoices());
     dispatch(fetchDrinksForInvoice());
@@ -103,6 +138,16 @@ export default function InvoiceScreen({ navigation }) {
       setHasNewUpdates(false);
     } catch (err) {
       console.log("Error checking updates:", err);
+    }
+
+    try {
+      const topRes = await api.get("/doanhthu/top-do-uong");
+      if (topRes.data && Array.isArray(topRes.data)) {
+        const topIds = topRes.data.slice(0, 3).map((item) => item.maDoUong);
+        setBestsellerIds(topIds);
+      }
+    } catch (err) {
+      console.log("Error fetching top drinks:", err);
     }
   };
 
@@ -183,54 +228,189 @@ export default function InvoiceScreen({ navigation }) {
     loadDataAndResetBadge();
   };
 
-  const handleAddDrink = (drink, duong = "100%", da = "100%") => {
+  const handleAddDrink = (drink, duong = "100%", da = "100%", ghiChu = "", toppings = []) => {
     const itemDuong = drink.duong || duong;
     const itemDa = drink.da || da;
+    const itemGhiChu = drink.ghiChu !== undefined ? drink.ghiChu : ghiChu;
+    
+    let itemToppings = "";
+    if (drink.toppings !== undefined) {
+      itemToppings = drink.toppings;
+    } else {
+      itemToppings = Array.isArray(toppings) 
+        ? toppings.filter(Boolean).join(",") 
+        : toppings;
+    }
 
     const existed = cartItems.find(
       (item) =>
-        item.maDoUong === drink.maDoUong &&
+        String(item.maDoUong) === String(drink.maDoUong) &&
         item.duong === itemDuong &&
-        item.da === itemDa,
+        item.da === itemDa &&
+        (item.ghiChu || "") === (itemGhiChu || "") &&
+        (item.toppings || "") === (itemToppings || ""),
     );
 
     if (existed) {
       setCartItems((prev) =>
         prev.map((item) =>
-          item.maDoUong === drink.maDoUong &&
+          String(item.maDoUong) === String(drink.maDoUong) &&
           item.duong === itemDuong &&
-          item.da === itemDa
+          item.da === itemDa &&
+          (item.ghiChu || "") === (itemGhiChu || "") &&
+          (item.toppings || "") === (itemToppings || "")
             ? { ...item, soluong: item.soluong + 1 }
             : item,
         ),
       );
     } else {
+      let toppingPrice = 0;
+      if (itemToppings) {
+        const toppingList = itemToppings
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+        for (const t of toppingList) {
+          const found = TOPPINGS.find((top) => top.id === t);
+          if (found) toppingPrice += found.price;
+        }
+      }
+      
+      const finalPrice = Number(drink.donGia) + toppingPrice;
+
       setCartItems((prev) => [
         ...prev,
         {
           maDoUong: drink.maDoUong,
           tenDoUong: drink.tenDoUong,
-          donGia: Number(drink.donGia),
+          donGia: finalPrice,
           soluong: 1,
           duong: itemDuong,
           da: itemDa,
+          ghiChu: itemGhiChu || "",
+          toppings: itemToppings || "",
         },
       ]);
     }
   };
 
   const handlePressAddDrink = (drink) => {
+    setEditingCartItemIndex(null);
     setCustomizingDrink(drink);
     setSelectedDuong("100%");
     setSelectedDa("100%");
+    setNote("");
+    setSelectedToppings([]);
     setOptionsModalVisible(true);
   };
 
-  const handleDecreaseDrink = (maDoUong, duong, da) => {
+  const handlePressEditCartItem = (item, index) => {
+    setEditingCartItemIndex(index);
+    setCustomizingDrink({
+      maDoUong: item.maDoUong,
+      tenDoUong: item.tenDoUong,
+      donGia: item.donGia,
+    });
+    
+    setSelectedDuong(item.duong || "100%");
+    setSelectedDa(item.da || "100%");
+    setNote(item.ghiChu || "");
+    setSelectedToppings(
+      item.toppings
+        ? item.toppings
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : []
+    );
+    setOptionsModalVisible(true);
+  };
+
+  const handleSaveCustomize = () => {
+    const toppingsString = selectedToppings.filter(Boolean).join(",");
+    const drinkCatalogItem = safeDrinks.find(
+      (d) => String(d.maDoUong) === String(customizingDrink.maDoUong)
+    );
+    
+    let basePrice = customizingDrink.donGia;
+    if (drinkCatalogItem) {
+      basePrice = Number(drinkCatalogItem.donGia);
+    } else if (editingCartItemIndex !== null) {
+      const originalItem = cartItems[editingCartItemIndex];
+      if (originalItem) {
+        let originalToppingPrice = 0;
+        if (originalItem.toppings) {
+          const originalToppingList = originalItem.toppings
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean);
+          originalToppingList.forEach((t) => {
+            const found = TOPPINGS.find((top) => top.id === t);
+            if (found) originalToppingPrice += found.price;
+          });
+        }
+        basePrice = Number(originalItem.donGia) - originalToppingPrice;
+      }
+    }
+
+    let toppingPrice = 0;
+    selectedToppings.forEach((t) => {
+      const found = TOPPINGS.find((top) => top.id === t);
+      if (found) toppingPrice += found.price;
+    });
+
+    const finalPrice = basePrice + toppingPrice;
+
+    if (editingCartItemIndex !== null) {
+      setCartItems((prev) => {
+        const updated = [...prev];
+        const originalItem = updated[editingCartItemIndex];
+
+        updated[editingCartItemIndex] = {
+          ...originalItem,
+          donGia: finalPrice,
+          duong: selectedDuong,
+          da: selectedDa,
+          ghiChu: note || "",
+          toppings: toppingsString || "",
+        };
+
+        const merged = [];
+        updated.forEach((itm) => {
+          const duplicateIdx = merged.findIndex(
+            (m) =>
+              String(m.maDoUong) === String(itm.maDoUong) &&
+              m.duong === itm.duong &&
+              m.da === itm.da &&
+              (m.ghiChu || "") === (itm.ghiChu || "") &&
+              (m.toppings || "") === (itm.toppings || "")
+          );
+          if (duplicateIdx > -1) {
+            merged[duplicateIdx].soluong += itm.soluong;
+          } else {
+            merged.push({ ...itm });
+          }
+        });
+
+        return merged;
+      });
+      setEditingCartItemIndex(null);
+    } else {
+      handleAddDrink(customizingDrink, selectedDuong, selectedDa, note, selectedToppings);
+    }
+
+    setOptionsModalVisible(false);
+  };
+
+  const handleDecreaseDrink = (maDoUong, duong, da, ghiChu = "", toppings = "") => {
     setCartItems((prev) =>
       prev
         .map((item) =>
-          item.maDoUong === maDoUong && item.duong === duong && item.da === da
+          String(item.maDoUong) === String(maDoUong) &&
+          item.duong === duong &&
+          item.da === da &&
+          (item.ghiChu || "") === (ghiChu || "") &&
+          (item.toppings || "") === (toppings || "")
             ? { ...item, soluong: item.soluong - 1 }
             : item,
         )
@@ -258,6 +438,8 @@ export default function InvoiceScreen({ navigation }) {
         soluong: item.soluong,
         duong: item.duong || "100%",
         da: item.da || "100%",
+        ghiChu: item.ghiChu || "",
+        toppings: item.toppings || "",
       })),
     };
 
@@ -267,6 +449,29 @@ export default function InvoiceScreen({ navigation }) {
       setCartItems([]);
       setModalVisible(false);
       reloadData();
+    }
+  };
+
+  const handleOpenDetailModal = async (invoice) => {
+    setSelectedDetailInvoice(invoice);
+    setDetailItems([]);
+    setDetailActiveTab("info");
+    setDetailModalVisible(true);
+    setIsDetailLoading(true);
+    try {
+      const response = await api.get(`/hoadon/${invoice.maHoaDon}`);
+      if (response.data && response.data.chiTiet) {
+        setDetailItems(response.data.chiTiet);
+      }
+    } catch (err) {
+      console.error("Lỗi lấy chi tiết hóa đơn:", err);
+      if (Platform.OS === "web") {
+        window.alert("Không thể lấy chi tiết hóa đơn");
+      } else {
+        Alert.alert("Lỗi", "Không thể lấy chi tiết hóa đơn");
+      }
+    } finally {
+      setIsDetailLoading(false);
     }
   };
 
@@ -285,9 +490,8 @@ export default function InvoiceScreen({ navigation }) {
   };
   const handleCashChange = (text, total) => {
     const cleanText = text.replace(/[^0-9]/g, "");
-    setCustomerCash(cleanText);
-
     const amount = parseFloat(cleanText) || 0;
+    setCustomerCash(cleanText ? amount.toLocaleString("vi-VN") + "đ" : "");
 
     if (amount >= total) {
       setChangeDue(amount - total);
@@ -298,7 +502,7 @@ export default function InvoiceScreen({ navigation }) {
 
   const selectQuickAmount = (amount, total) => {
     const cleanAmount = Math.ceil(amount);
-    setCustomerCash(cleanAmount.toString());
+    setCustomerCash(cleanAmount > 0 ? cleanAmount.toLocaleString("vi-VN") + "đ" : "");
     if (cleanAmount >= total) {
       setChangeDue(cleanAmount - total);
     } else {
@@ -316,7 +520,7 @@ export default function InvoiceScreen({ navigation }) {
 
       if (paymentMethod === "tienmat") {
         const cashVal =
-          customerCash || selectedPaymentInvoice.tongtien.toString();
+          customerCash.replace(/[^0-9]/g, "") || selectedPaymentInvoice.tongtien.toString();
         const changeVal = changeDue;
         handlePrintBill(maHoaDon, cashVal, changeVal);
       }
@@ -449,17 +653,30 @@ export default function InvoiceScreen({ navigation }) {
 
         const itemsHtml = chiTiet
           .map(
-            (item) => `
-          <tr>
-            <td style="padding: 6px 0; text-align: left; vertical-align: top;">
-              <strong>${item.tenDoUong}</strong><br/>
-              <small style="color: #666; font-size: 11px;">Đường: ${item.duong} | Đá: ${item.da}</small>
-            </td>
-            <td style="padding: 6px 0; text-align: center; vertical-align: top;">${item.soluong}</td>
-            <td style="padding: 6px 0; text-align: right; vertical-align: top;">${Number(item.dongia).toLocaleString("vi-VN")}đ</td>
-            <td style="padding: 6px 0; text-align: right; vertical-align: top;">${Number(item.thanhtien).toLocaleString("vi-VN")}đ</td>
-          </tr>
-        `,
+            (item) => {
+              const toppingsText = item.toppings
+                ? item.toppings
+                    .split(",")
+                    .map((t) => {
+                      const found = TOPPINGS.find((top) => top.id === t);
+                      return found ? found.name : "";
+                    })
+                    .filter(Boolean)
+                    .join(", ")
+                : "";
+              const details = `Đường: ${item.duong} | Đá: ${item.da}${item.ghiChu ? ` | Ghi chú: ${item.ghiChu}` : ""}${toppingsText ? ` | Topping: ${toppingsText}` : ""}`;
+              return `
+              <tr>
+                <td style="padding: 6px 0; text-align: left; vertical-align: top;">
+                  <strong>${item.tenDoUong}</strong><br/>
+                  <small style="color: #666; font-size: 11px;">${details}</small>
+                </td>
+                <td style="padding: 6px 0; text-align: center; vertical-align: top;">${item.soluong}</td>
+                <td style="padding: 6px 0; text-align: right; vertical-align: top;">${Number(item.dongia).toLocaleString("vi-VN")}đ</td>
+                <td style="padding: 6px 0; text-align: right; vertical-align: top;">${Number(item.thanhtien).toLocaleString("vi-VN")}đ</td>
+              </tr>
+            `;
+            }
           )
           .join("");
 
@@ -639,6 +856,8 @@ export default function InvoiceScreen({ navigation }) {
           soluong: item.soluong,
           duong: item.duong || "100%",
           da: item.da || "100%",
+          ghiChu: item.ghiChu || "",
+          toppings: item.toppings || "",
         }));
         setCartItems(prepopulated);
       }
@@ -668,6 +887,8 @@ export default function InvoiceScreen({ navigation }) {
         soluong: item.soluong,
         duong: item.duong || "100%",
         da: item.da || "100%",
+        ghiChu: item.ghiChu || "",
+        toppings: item.toppings || "",
       })),
     };
 
@@ -715,7 +936,11 @@ export default function InvoiceScreen({ navigation }) {
     const isCancelled = item.trangthaithanhtoan === "Đã hủy";
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => handleOpenDetailModal(item)}
+        activeOpacity={0.8}
+      >
         <View style={styles.cardHeader}>
           <Text style={styles.invoiceTitle}>Hóa đơn #{item.maHoaDon}</Text>
 
@@ -783,18 +1008,28 @@ export default function InvoiceScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
   const renderDrinkGridItem = (drink) => {
     const imageUrl = drink.hinhAnh ? `${BASE_URL}/img/${drink.hinhAnh}` : null;
+    const bestsellerIndex = bestsellerIds.findIndex((id) => String(id) === String(drink.maDoUong));
+
     return (
       <TouchableOpacity
         key={drink.maDoUong}
         style={styles.drinkGridCard}
         onPress={() => handlePressAddDrink(drink)}
       >
+        {bestsellerIndex > -1 && (
+          <View style={[styles.bestsellerDrinkBadge, bestsellerIndex === 0 ? styles.badgeTop1 : styles.badgeTop23]}>
+            <Text style={styles.bestsellerDrinkBadgeText}>
+              {bestsellerIndex === 0 ? "Bestseller 🔥" : "Hot ⭐"}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.drinkGridImageWrapper}>
           {imageUrl ? (
             <Image
@@ -921,27 +1156,24 @@ export default function InvoiceScreen({ navigation }) {
             <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
           </TouchableOpacity>
           <Text style={styles.title}>Quản lý hóa đơn</Text>
+          {hasNewUpdates && (
+            <View style={{
+              backgroundColor: "#ffe0b2",
+              borderRadius: 12,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              marginLeft: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4
+            }}>
+              <FontAwesome5 name="exclamation-circle" size={10} color="#e65100" />
+              <Text style={{ fontSize: 9, fontWeight: "bold", color: "#e65100" }}>Mới</Text>
+            </View>
+          )}
         </View>
 
         <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-          <TouchableOpacity
-            onPress={handleManualReload}
-            style={[
-              styles.reloadBtn,
-              hasNewUpdates && styles.reloadBtnHighlight
-            ]}
-            activeOpacity={0.7}
-          >
-            <FontAwesome5 
-              name="sync" 
-              size={13} 
-              color={hasNewUpdates ? "#fff" : "#4b3621"} 
-            />
-            {hasNewUpdates && (
-              <Text style={styles.reloadBtnText}>Có cập nhật mới</Text>
-            )}
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() => {
@@ -965,6 +1197,14 @@ export default function InvoiceScreen({ navigation }) {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <Text style={styles.emptyText}>Chưa có hóa đơn nào</Text>
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={loadDataAndResetBadge}
+            tintColor="#4b3621"
+            colors={["#4b3621"]}
+          />
         }
       />
 
@@ -1041,29 +1281,33 @@ export default function InvoiceScreen({ navigation }) {
             {cartItems.length === 0 ? (
               <Text style={styles.emptyText}>Chưa chọn món nào</Text>
             ) : (
-              cartItems.map((item) => (
+              cartItems.map((item, index) => (
                 <View
-                  key={`${item.maDoUong}-${item.duong}-${item.da}`}
+                  key={`${item.maDoUong}-${item.duong}-${item.da}-${item.ghiChu || ""}-${item.toppings || ""}`}
                   style={styles.cartRow}
                 >
-                  <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onPress={() => handlePressEditCartItem(item, index)}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.drinkName}>{item.tenDoUong}</Text>
                     <Text
                       style={{ fontSize: 12, color: "#8d6e63", marginTop: 2 }}
                     >
-                      Ghi chú: {item.duong} đường, {item.da} đá
+                      Tùy chọn: {item.duong} đường, {item.da} đá{item.ghiChu ? ` | Ghi chú: ${item.ghiChu}` : ""}{getToppingsDisplayName(item.toppings)}
                     </Text>
                     <Text style={styles.drinkPrice}>
                       {item.soluong} x{" "}
                       {Number(item.donGia).toLocaleString("vi-VN")}đ
                     </Text>
-                  </View>
+                  </TouchableOpacity>
 
                   <View style={styles.quantityBox}>
                     <TouchableOpacity
                       style={styles.quantityBtn}
                       onPress={() =>
-                        handleDecreaseDrink(item.maDoUong, item.duong, item.da)
+                        handleDecreaseDrink(item.maDoUong, item.duong, item.da, item.ghiChu, item.toppings)
                       }
                     >
                       <Text style={styles.quantityText}>-</Text>
@@ -1073,7 +1317,7 @@ export default function InvoiceScreen({ navigation }) {
 
                     <TouchableOpacity
                       style={styles.quantityBtn}
-                      onPress={() => handleAddDrink(item, item.duong, item.da)}
+                      onPress={() => handleAddDrink(item, item.duong, item.da, item.ghiChu, item.toppings)}
                     >
                       <Text style={styles.quantityText}>+</Text>
                     </TouchableOpacity>
@@ -1177,29 +1421,33 @@ export default function InvoiceScreen({ navigation }) {
             {cartItems.length === 0 ? (
               <Text style={styles.emptyText}>Chưa chọn món nào</Text>
             ) : (
-              cartItems.map((item) => (
+              cartItems.map((item, index) => (
                 <View
-                  key={`${item.maDoUong}-${item.duong}-${item.da}`}
+                  key={`${item.maDoUong}-${item.duong}-${item.da}-${item.ghiChu || ""}-${item.toppings || ""}`}
                   style={styles.cartRow}
                 >
-                  <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1 }}
+                    onPress={() => handlePressEditCartItem(item, index)}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.drinkName}>{item.tenDoUong}</Text>
                     <Text
                       style={{ fontSize: 12, color: "#8d6e63", marginTop: 2 }}
                     >
-                      Ghi chú: {item.duong} đường, {item.da} đá
+                      Tùy chọn: {item.duong} đường, {item.da} đá{item.ghiChu ? ` | Ghi chú: ${item.ghiChu}` : ""}{getToppingsDisplayName(item.toppings)}
                     </Text>
                     <Text style={styles.drinkPrice}>
                       {item.soluong} x{" "}
                       {Number(item.donGia).toLocaleString("vi-VN")}đ
                     </Text>
-                  </View>
+                  </TouchableOpacity>
 
                   <View style={styles.quantityBox}>
                     <TouchableOpacity
                       style={styles.quantityBtn}
                       onPress={() =>
-                        handleDecreaseDrink(item.maDoUong, item.duong, item.da)
+                        handleDecreaseDrink(item.maDoUong, item.duong, item.da, item.ghiChu, item.toppings)
                       }
                     >
                       <Text style={styles.quantityText}>-</Text>
@@ -1209,7 +1457,7 @@ export default function InvoiceScreen({ navigation }) {
 
                     <TouchableOpacity
                       style={styles.quantityBtn}
-                      onPress={() => handleAddDrink(item, item.duong, item.da)}
+                      onPress={() => handleAddDrink(item, item.duong, item.da, item.ghiChu, item.toppings)}
                     >
                       <Text style={styles.quantityText}>+</Text>
                     </TouchableOpacity>
@@ -1247,76 +1495,126 @@ export default function InvoiceScreen({ navigation }) {
         onRequestClose={() => setOptionsModalVisible(false)}
       >
         <View style={styles.optionsModalOverlay}>
-          <View style={styles.optionsModalContainer}>
-            <Text style={styles.optionsModalTitle}>
-              Tùy chỉnh: {customizingDrink?.tenDoUong}
-            </Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ width: "100%", alignItems: "center" }}
+          >
+            <View style={[styles.optionsModalContainer, { maxHeight: "85%" }]}>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+                <Text style={styles.optionsModalTitle}>
+                  Tùy chỉnh: {customizingDrink?.tenDoUong}
+                </Text>
 
-            <Text style={styles.optionsLabel}>Chọn lượng đường:</Text>
-            <View style={styles.optionsRow}>
-              {["0%", "30%", "50%", "70%", "100%"].map((level) => (
+                <Text style={styles.optionsLabel}>Chọn lượng đường:</Text>
+                <View style={styles.optionsRow}>
+                  {["0%", "30%", "50%", "70%", "100%"].map((level) => (
+                    <TouchableOpacity
+                      key={level}
+                      style={[
+                        styles.optionBtn,
+                        selectedDuong === level && styles.optionBtnActive,
+                      ]}
+                      onPress={() => setSelectedDuong(level)}
+                    >
+                      <Text
+                        style={[
+                          styles.optionText,
+                          selectedDuong === level && styles.optionTextActive,
+                        ]}
+                      >
+                        {level}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={styles.optionsLabel}>Chọn lượng đá:</Text>
+                <View style={styles.optionsRow}>
+                  {["0%", "30%", "50%", "70%", "100%"].map((level) => (
+                    <TouchableOpacity
+                      key={level}
+                      style={[
+                        styles.optionBtn,
+                        selectedDa === level && styles.optionBtnActive,
+                      ]}
+                      onPress={() => setSelectedDa(level)}
+                    >
+                      <Text
+                        style={[
+                          styles.optionText,
+                          selectedDa === level && styles.optionTextActive,
+                        ]}
+                      >
+                        {level}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <Text style={styles.optionsLabel}>Chọn Topping (có tính phí):</Text>
+                <View style={styles.toppingsGrid}>
+                  {TOPPINGS.map((topping) => {
+                    const isSelected = selectedToppings.includes(topping.id);
+                    return (
+                      <TouchableOpacity
+                        key={topping.id}
+                        style={[
+                          styles.toppingBtn,
+                          isSelected && styles.toppingBtnActive,
+                        ]}
+                        onPress={() => {
+                          if (isSelected) {
+                            setSelectedToppings(selectedToppings.filter((id) => id !== topping.id));
+                          } else {
+                            setSelectedToppings([...selectedToppings, topping.id]);
+                          }
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.toppingText,
+                            isSelected && styles.toppingTextActive,
+                          ]}
+                        >
+                          {topping.name} (+{topping.price.toLocaleString("vi-VN")}đ)
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.optionsLabel}>Ghi chú:</Text>
+                <TextInput
+                  style={styles.optionsInput}
+                  placeholder="Nhập ghi chú cho đồ uống..."
+                  placeholderTextColor="#aaa"
+                  value={note}
+                  onChangeText={setNote}
+                />
+              </ScrollView>
+
+              <View style={styles.optionsActionRow}>
                 <TouchableOpacity
-                  key={level}
-                  style={[
-                    styles.optionBtn,
-                    selectedDuong === level && styles.optionBtnActive,
-                  ]}
-                  onPress={() => setSelectedDuong(level)}
+                  style={styles.optionsCancelBtn}
+                  onPress={() => {
+                    setOptionsModalVisible(false);
+                    setEditingCartItemIndex(null);
+                  }}
                 >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      selectedDuong === level && styles.optionTextActive,
-                    ]}
-                  >
-                    {level}
+                  <Text style={styles.optionsCancelText}>Hủy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.optionsConfirmBtn}
+                  onPress={handleSaveCustomize}
+                >
+                  <Text style={styles.optionsConfirmText}>
+                    {editingCartItemIndex !== null ? "Lưu" : "Thêm món"}
                   </Text>
                 </TouchableOpacity>
-              ))}
+              </View>
             </View>
-
-            <Text style={styles.optionsLabel}>Chọn lượng đá:</Text>
-            <View style={styles.optionsRow}>
-              {["0%", "30%", "50%", "70%", "100%"].map((level) => (
-                <TouchableOpacity
-                  key={level}
-                  style={[
-                    styles.optionBtn,
-                    selectedDa === level && styles.optionBtnActive,
-                  ]}
-                  onPress={() => setSelectedDa(level)}
-                >
-                  <Text
-                    style={[
-                      styles.optionText,
-                      selectedDa === level && styles.optionTextActive,
-                    ]}
-                  >
-                    {level}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.optionsActionRow}>
-              <TouchableOpacity
-                style={styles.optionsCancelBtn}
-                onPress={() => setOptionsModalVisible(false)}
-              >
-                <Text style={styles.optionsCancelText}>Hủy</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.optionsConfirmBtn}
-                onPress={() => {
-                  handleAddDrink(customizingDrink, selectedDuong, selectedDa);
-                  setOptionsModalVisible(false);
-                }}
-              >
-                <Text style={styles.optionsConfirmText}>Thêm món</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1414,13 +1712,13 @@ export default function InvoiceScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 300, marginVertical: 10 }}>
+            <ScrollView style={{ maxHeight: paymentMethod === "qr" ? 380 : 300, marginVertical: 10 }}>
               {paymentMethod === "tienmat" ? (
                 <View>
                   <Text style={styles.inputLabel}>Số tiền khách đưa (đ):</Text>
                   <TextInput
                     style={styles.moneyInput}
-                    placeholder="Ví dụ: 100000"
+                    placeholder="Ví dụ: 100.000"
                     placeholderTextColor="#aaa"
                     keyboardType="numeric"
                     value={customerCash}
@@ -1485,43 +1783,15 @@ export default function InvoiceScreen({ navigation }) {
                     Khách hàng quét mã QR này để mở trang thanh toán payOS.
                   </Text>
 
-                  <View style={styles.invoiceInfoBox}>
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Mã hóa đơn:</Text>
-                      <Text style={styles.infoValue}>
-                        #{selectedPaymentInvoice?.maHoaDon}
-                      </Text>
-                    </View>
-
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Số tiền:</Text>
-                      <Text
-                        style={[
-                          styles.infoValue,
-                          {
-                            color: "#2e7d32",
-                            fontSize: 18,
-                            fontWeight: "bold",
-                          },
-                        ]}
-                      >
-                        {Number(
-                          selectedPaymentInvoice?.tongtien || 0,
-                        ).toLocaleString("vi-VN")}
-                        đ
-                      </Text>
-                    </View>
-                  </View>
-
                   {hasPayosQr ? (
                     <View style={{ alignItems: "center", marginTop: 16 }}>
                       {Platform.OS === "web" ? (
                         <Image
                           source={{ uri: payosQrImage }}
-                          style={{ width: 260, height: 260 }}
+                          style={{ width: 210, height: 210 }}
                         />
                       ) : (
-                        <QRCodeSvg value={payosQrValue} size={260} />
+                        <QRCodeSvg value={payosQrValue} size={210} />
                       )}
 
                       <Text
@@ -1600,6 +1870,112 @@ export default function InvoiceScreen({ navigation }) {
                   </Text>
                 </TouchableOpacity>
               )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={detailModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDetailModalVisible(false)}
+      >
+        <View style={styles.optionsModalOverlay}>
+          <View style={[styles.optionsModalContainer, { maxWidth: 500, width: "90%", maxHeight: "80%", flexDirection: "column" }]}>
+            <View style={[styles.modalHeader, { justifyContent: "flex-start", marginBottom: 12 }]}>
+              <TouchableOpacity onPress={() => setDetailModalVisible(false)} style={{ marginRight: 12, padding: 4 }}>
+                <FontAwesome5 name="arrow-left" size={18} color="#4b3621" />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>
+                Chi tiết hóa đơn #{selectedDetailInvoice?.maHoaDon}
+              </Text>
+            </View>
+
+            {isDetailLoading ? (
+              <View style={{ paddingVertical: 40, alignItems: "center" }}>
+                <ActivityIndicator size="large" color="#4b3621" />
+                <Text style={{ marginTop: 10, color: "#8d6e63" }}>Đang tải chi tiết...</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ flexShrink: 1, width: "100%" }} showsVerticalScrollIndicator={true}>
+                <View style={styles.invoiceInfoBox}>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Ngày lập:</Text>
+                    <Text style={styles.infoValue}>
+                      {formatDate(selectedDetailInvoice?.createdAt || selectedDetailInvoice?.ngaylap)}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Nhân viên lập:</Text>
+                    <Text style={styles.infoValue}>
+                      {selectedDetailInvoice?.HoTen || "Không rõ"}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Trạng thái:</Text>
+                    <Text style={styles.infoValue}>
+                      {selectedDetailInvoice?.trangthaithanhtoan}
+                    </Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Phương thức:</Text>
+                    <Text style={styles.infoValue}>
+                      {selectedDetailInvoice?.phuongThuc === "TienMat" ? "Tiền mặt" : selectedDetailInvoice?.phuongThuc || "Chưa rõ"}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.sectionTitle, { fontSize: 15, marginVertical: 10, paddingHorizontal: 0 }]}>Món đã đặt</Text>
+                
+                {detailItems.map((item, index) => {
+                  const imageUrl = item.hinhAnh ? `${BASE_URL}/img/${item.hinhAnh}` : null;
+                  return (
+                    <View key={index} style={styles.detailRow}>
+                      {imageUrl ? (
+                        <Image
+                          source={{ uri: imageUrl }}
+                          style={styles.detailDrinkImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.detailDrinkPlaceholder}>
+                          <FontAwesome5 name="coffee" size={18} color="#8d6e63" />
+                        </View>
+                      )}
+                      
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.detailDrinkName}>{item.tenDoUong}</Text>
+                        <Text style={styles.detailDrinkOptions}>
+                          Tùy chọn: {item.duong} đường, {item.da} đá{item.ghiChu ? ` | Ghi chú: ${item.ghiChu}` : ""}{getToppingsDisplayName(item.toppings)}
+                        </Text>
+                        <Text style={styles.detailDrinkPrice}>
+                          {item.soluong} x {Number(item.dongia).toLocaleString("vi-VN")}đ
+                        </Text>
+                      </View>
+                      <Text style={styles.detailRowTotal}>
+                        {Number(item.thanhtien).toLocaleString("vi-VN")}đ
+                      </Text>
+                    </View>
+                  );
+                })}
+
+                <View style={[styles.totalBox, { marginTop: 15, borderTopWidth: 1, borderColor: "#eadfd3", paddingTop: 12 }]}>
+                  <Text style={styles.totalLabel}>Tổng cộng</Text>
+                  <Text style={[styles.totalValue, { color: "#2e7d32", fontSize: 20 }]}>
+                    {Number(selectedDetailInvoice?.tongtien || 0).toLocaleString("vi-VN")}đ
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+
+            <View style={[styles.optionsActionRow, { marginTop: 12 }]}>
+              <TouchableOpacity
+                style={[styles.optionsCancelBtn, { backgroundColor: "#4b3621" }]}
+                onPress={() => setDetailModalVisible(false)}
+              >
+                <Text style={[styles.optionsCancelText, { color: "#fff" }]}>Đóng</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -2002,6 +2378,17 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
+  optionsInput: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    borderRadius: 10,
+    padding: 10,
+    color: "#4b3621",
+    fontSize: 13,
+    marginTop: 4,
+    marginBottom: 8,
+  },
   optionsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2368,5 +2755,138 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "bold",
+  },
+  toppingsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+  toppingBtn: {
+    width: "48%",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    backgroundColor: "#f8f1e9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toppingBtnActive: {
+    backgroundColor: "#4b3621",
+    borderColor: "#4b3621",
+  },
+  toppingText: {
+    fontSize: 11,
+    color: "#8d6e63",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  toppingTextActive: {
+    color: "#fff",
+  },
+  detailRow: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#f1e6da",
+    alignItems: "center",
+  },
+  detailDrinkImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  detailDrinkPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: "#f8f1e9",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+  },
+  detailDrinkName: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4b3621",
+  },
+  detailDrinkOptions: {
+    fontSize: 11,
+    color: "#8d6e63",
+    marginTop: 2,
+  },
+  detailDrinkPrice: {
+    fontSize: 12,
+    color: "#795548",
+    marginTop: 4,
+  },
+  detailRowTotal: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4b3621",
+    marginLeft: 8,
+  },
+  modalTabRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#f5ece3",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    gap: 4,
+  },
+  modalTabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    flexDirection: "row",
+  },
+  modalTabBtnActive: {
+    backgroundColor: "#4b3621",
+  },
+  modalTabText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#8d6e63",
+  },
+  modalTabTextActive: {
+    color: "#fff",
+  },
+  bestsellerDrinkBadge: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderBottomRightRadius: 10,
+    borderTopLeftRadius: 13,
+    zIndex: 10,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
+  },
+  badgeTop1: {
+    backgroundColor: "#d32f2f",
+  },
+  badgeTop23: {
+    backgroundColor: "#e65100", // Darker orange for better contrast
+  },
+  bestsellerDrinkBadgeText: {
+    color: "#fff",
+    fontSize: 10.5,
+    fontWeight: "bold",
+    letterSpacing: 0.3,
   },
 });

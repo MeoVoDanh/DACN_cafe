@@ -99,7 +99,7 @@ export default function EmployeeDashboardScreen({ navigation }) {
                 <View style={styles.headerTextGroup}>
                   <Text style={styles.title}>{user?.HoTen || "Nhân viên"}</Text>
                   <Text style={styles.subtitle}>
-                    Chức danh: {user?.vaiTro || "Nhân viên"}
+                    Chức danh: {user?.vaiTro === "Admin" ? "Quản lý" : "Nhân viên"}
                   </Text>
                 </View>
               </View>
