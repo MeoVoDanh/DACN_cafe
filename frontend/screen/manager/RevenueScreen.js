@@ -55,16 +55,23 @@ const TOPPINGS = [
   { id: "hatsen", name: "Hạt sen", price: 10000 },
 ];
 
-const getToppingsDisplayName = (toppingsString) => {
-  if (!toppingsString) return "";
-  const toppingList = toppingsString.split(",");
-  const names = toppingList
-    .map((t) => {
-      const found = TOPPINGS.find((top) => top.id === t);
-      return found ? found.name : "";
-    })
-    .filter(Boolean);
-  return names.length > 0 ? ` + Topping: ${names.join(", ")}` : "";
+const getToppingsDisplayName = (toppings) => {
+  if (!toppings) return "";
+  if (Array.isArray(toppings)) {
+    const names = toppings.map((t) => t.tenTopping || t.name).filter(Boolean);
+    return names.length > 0 ? ` + Topping: ${names.join(", ")}` : "";
+  }
+  if (typeof toppings === "string") {
+    const toppingList = toppings.split(",");
+    const names = toppingList
+      .map((t) => {
+        const found = TOPPINGS.find((top) => top.id === t);
+        return found ? found.name : "";
+      })
+      .filter(Boolean);
+    return names.length > 0 ? ` + Topping: ${names.join(", ")}` : "";
+  }
+  return "";
 };
 
 

@@ -69,15 +69,8 @@ export default function EmployeeScreen({ navigation, route }) {
     let emailTrimmed = Email.trim();
     if (!emailTrimmed) {
       newErrors.Email = "Email không được để trống";
-    } else {
-      // Tự động thêm đuôi mặc định @dacncafe.com nếu không nhập ký tự '@'
-      if (!emailTrimmed.includes("@")) {
-        emailTrimmed = emailTrimmed + "@dacncafe.com";
-      }
-      const emailRegex = /^[^\s@]+@dacncafe\.com$/;
-      if (!emailRegex.test(emailTrimmed)) {
-        newErrors.Email = "Email không đúng định dạng (phải kết thúc bằng @dacncafe.com)";
-      }
+    } else if (!emailTrimmed.includes("@")) {
+      newErrors.Email = "Email không đúng định dạng (phải chứa ký tự @)";
     }
 
     const sdtTrimmed = SDT.trim();

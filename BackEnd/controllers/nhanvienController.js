@@ -34,11 +34,17 @@ export const getNhanVienById = async (req, res) => {
 
 export const createNhanVien = async (req, res) => {
   try {
-    const { HoTen, tenDangNhap, MatKhau } = req.body;
+    const { HoTen, tenDangNhap, MatKhau, Email } = req.body;
 
     if (!HoTen || !tenDangNhap || !MatKhau) {
       return res.status(400).json({
         message: "Họ tên, tên đăng nhập và mật khẩu không được để trống",
+      });
+    }
+
+    if (Email && !Email.includes("@")) {
+      return res.status(400).json({
+        message: "Email không hợp lệ",
       });
     }
 
@@ -55,11 +61,17 @@ export const createNhanVien = async (req, res) => {
 
 export const updateNhanVien = async (req, res) => {
   try {
-    const { HoTen } = req.body;
+    const { HoTen, Email } = req.body;
 
     if (!HoTen) {
       return res.status(400).json({
         message: "Họ tên không được để trống",
+      });
+    }
+
+    if (Email && !Email.includes("@")) {
+      return res.status(400).json({
+        message: "Email không hợp lệ",
       });
     }
 

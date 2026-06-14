@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useCallback } from "react";
+import React, { useEffect, useMemo, useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   Platform,
   Image,
+  TextInput,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchEmployees } from "../../redux/employeeSlice";
@@ -24,6 +25,16 @@ export default function EmployeeListScreen({ navigation }) {
   const { employees, isLoading, error } = useSelector(
     (state) => state.employee,
   );
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredEmployees = useMemo(() => {
+    if (!searchQuery.trim()) return employees;
+    const query = searchQuery.toLowerCase().trim();
+    return employees.filter(
+      (emp) => emp.HoTen && emp.HoTen.toLowerCase().includes(query)
+    );
+  }, [employees, searchQuery]);
 
   const imageBaseUrl = useMemo(() => {
     if (api.defaults.baseURL) {
@@ -180,9 +191,27 @@ export default function EmployeeListScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <FontAwesome5 name="search" size={14} color="#8d6e63" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm nhân viên theo tên..."
+            placeholderTextColor="#8d6e63"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearBtn}>
+              <FontAwesome5 name="times-circle" size={16} color="#8d6e63" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </View>
+
       <FlatList
         style={styles.list}
-        data={employees}
+        data={filteredEmployees}
         keyExtractor={(item, index) =>
           String(item.MaNhanVien ?? item.maNhanVien ?? item.MaTaiKhoan ?? index)
         }
@@ -199,7 +228,9 @@ export default function EmployeeListScreen({ navigation }) {
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>Chưa có nhân viên nào</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery ? "Không tìm thấy nhân viên phù hợp" : "Chưa có nhân viên nào"}
+            </Text>
           </View>
         }
       />
@@ -398,5 +429,32 @@ const styles = StyleSheet.create({
   emptyText: {
     color: "#8d6e63",
     fontSize: 16,
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#eadfd3",
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#4b3621",
+    fontSize: 14,
+    height: "100%",
+    padding: 0,
+  },
+  clearBtn: {
+    padding: 4,
   },
 });

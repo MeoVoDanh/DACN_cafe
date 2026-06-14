@@ -20,6 +20,7 @@ import {
   fetchAvailableShifts,
   fetchMyShifts,
   registerShift,
+  clearShiftMessage,
 } from "../../redux/employeeShiftSlice";
 import { FontAwesome5 } from "@expo/vector-icons";
 import api from "../../redux/api";
@@ -228,15 +229,26 @@ export default function EmployeeShiftScreen({ navigation }) {
 
   useEffect(() => {
     if (error) {
-      Alert.alert("Lỗi", error);
+      Alert.alert("Lỗi", error, [
+        { text: "OK", onPress: () => dispatch(clearShiftMessage()) },
+      ]);
     }
-  }, [error]);
+  }, [error, dispatch]);
 
   useEffect(() => {
     if (message) {
-      Alert.alert("Thông báo", message);
+      Alert.alert("Thông báo", message, [
+        { text: "OK", onPress: () => dispatch(clearShiftMessage()) },
+      ]);
     }
-  }, [message]);
+  }, [message, dispatch]);
+
+  // Dọn dẹp thông báo lỗi/thành công khi rời màn hình
+  useEffect(() => {
+    return () => {
+      dispatch(clearShiftMessage());
+    };
+  }, [dispatch]);
 
   const reloadData = async () => {
     setRefreshing(true);
@@ -244,8 +256,12 @@ export default function EmployeeShiftScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const handleRegister = async (maCa) => {
-    const result = await dispatch(registerShift(maCa));
+  const handleRegister = async (item) => {
+    if (item.gioBatDau && new Date() > new Date(item.gioBatDau)) {
+      Alert.alert("Thông báo", "Ca làm việc này đã bắt đầu hoặc đã qua thời gian đăng ký.");
+      return;
+    }
+    const result = await dispatch(registerShift(item.maCa));
 
     if (registerShift.fulfilled.match(result)) {
       reloadData();
@@ -339,6 +355,7 @@ export default function EmployeeShiftScreen({ navigation }) {
     const isMine = item.type === "mine";
     const isAvailable = item.type === "available";
     const isUnavailable = item.type === "unavailable";
+    const isShiftStarted = item.gioBatDau ? new Date() > new Date(item.gioBatDau) : false;
 
     return (
       <View key={item.tenCa} style={[styles.card, isUnavailable && styles.cardUnavailable]}>
@@ -365,11 +382,11 @@ export default function EmployeeShiftScreen({ navigation }) {
               style={[
                 styles.statusText,
                 isMine && (item.trangThai === "Chờ duyệt" ? styles.statusPending : styles.statusApproved),
-                isAvailable && styles.statusAvailable,
+                isAvailable && (isShiftStarted ? styles.statusUnavailableText : styles.statusAvailable),
                 isUnavailable && styles.statusUnavailableText,
               ]}
             >
-              {isAvailable ? "Còn trống" : (isMine ? item.trangThai : "Đã đầy / Chưa mở")}
+              {isAvailable ? (isShiftStarted ? "Đã qua ca" : "Còn trống") : (isMine ? item.trangThai : "Đã đầy / Chưa mở")}
             </Text>
           </View>
         </View>
@@ -411,13 +428,20 @@ export default function EmployeeShiftScreen({ navigation }) {
               </Text>
             </TouchableOpacity>
           ) : isAvailable ? (
-            <TouchableOpacity
-              style={styles.registerBtn}
-              onPress={() => handleRegister(item.maCa)}
-            >
-              <FontAwesome5 name="check-circle" size={14} color="#fff" />
-              <Text style={styles.actionText}>Đăng ký ca</Text>
-            </TouchableOpacity>
+            isShiftStarted ? (
+              <View style={[styles.actionBtn, styles.disabledBtn]}>
+                <FontAwesome5 name="clock" size={14} color="#fff" />
+                <Text style={styles.actionText}>Đã qua ca làm</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.registerBtn}
+                onPress={() => handleRegister(item)}
+              >
+                <FontAwesome5 name="check-circle" size={14} color="#fff" />
+                <Text style={styles.actionText}>Đăng ký ca</Text>
+              </TouchableOpacity>
+            )
           ) : (
             <View style={[styles.actionBtn, styles.disabledBtn]}>
               <FontAwesome5 name="ban" size={14} color="#fff" />

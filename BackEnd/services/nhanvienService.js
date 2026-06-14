@@ -7,6 +7,7 @@ export const getAllNhanVienService = async () => {
       nv.MaNhanVien,
       nv.HoTen,
       nv.Email,
+      nv.SDT,
       nv.SoCCCD,
       nv.TrangThai,
       nv.HinhAnh,

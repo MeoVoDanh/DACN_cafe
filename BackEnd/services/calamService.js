@@ -163,6 +163,14 @@ export const dangKyCaLamService = async (maCa, maNhanVien) => {
   const targetShift = shifts[0];
   const { tenCa, ngayLam, gioBatDau, gioKetThuc } = targetShift;
 
+  // Kiểm tra thời gian thực đã qua giờ bắt đầu ca làm chưa
+  if (gioBatDau && new Date() > new Date(gioBatDau)) {
+    return {
+      statusCode: 400,
+      data: { message: "Ca làm việc này đã bắt đầu hoặc đã qua thời gian đăng ký." },
+    };
+  }
+
   // 2. Đếm số lượng nhân viên hiện tại đã đăng ký ca này vào ngày này (cả 'Chờ duyệt' và 'Đã đăng ký')
   const [countRows] = await db.query(
     `
@@ -568,9 +576,10 @@ export const getPendingShiftsService = async () => {
       clv.MaNhanVien,
       clv.ghiChu,
       nv.HoTen,
-      nv.vaiTro
+      tk.vaiTro
     FROM CaLamViec clv
     JOIN NhanVien nv ON clv.MaNhanVien = nv.MaNhanVien
+    JOIN TaiKhoan tk ON nv.MaTaiKhoan = tk.MaTaiKhoan
     WHERE clv.trangThai = 'Chờ duyệt'
     ORDER BY clv.ngayLam ASC, clv.gioBatDau ASC
   `);

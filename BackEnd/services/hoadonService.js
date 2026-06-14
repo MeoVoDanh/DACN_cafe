@@ -1,13 +1,5 @@
 import db from "../config/db.js";
 
-const TOPPINGS_PRICES = {
-  tranchautrang: 5000,
-  tranchauden: 5000,
-  thachsinhto: 5000,
-  kemcheese: 10000,
-  hatsen: 10000,
-};
-
 export const getAllHoaDonService = async () => {
   const [rows] = await db.query(`
     SELECT 
@@ -56,26 +48,48 @@ export const getHoaDonByIdService = async (maHoaDon) => {
     };
   }
 
+  // Lấy chi tiết hóa đơn (dùng schema chuẩn từ DACN_cafe.sql)
   const [chiTietRows] = await db.query(
     `
     SELECT 
+      cthd.maChiTietHoaDon,
       cthd.maHoaDon,
       cthd.maDoUong,
       du.tenDoUong,
       du.hinhAnh,
       cthd.soluong,
       cthd.dongia,
+      cthd.tongTienTopping,
       cthd.thanhtien,
       cthd.duong,
       cthd.da,
-      cthd.ghiChu,
-      cthd.toppings
+      cthd.size,
+      cthd.ghiChu
     FROM ChiTietHoaDon cthd
     JOIN DoUong du ON cthd.maDoUong = du.maDoUong
     WHERE cthd.maHoaDon = ?
     `,
     [maHoaDon],
   );
+
+  // Lấy topping cho từng chi tiết hóa đơn từ bảng ChiTietTopping
+  for (const chiTiet of chiTietRows) {
+    const [toppingRows] = await db.query(
+      `
+      SELECT 
+        ctt.maTopping,
+        tp.tenTopping,
+        ctt.soLuong,
+        ctt.donGia,
+        ctt.thanhtien
+      FROM ChiTietTopping ctt
+      JOIN Topping tp ON ctt.maTopping = tp.maTopping
+      WHERE ctt.maChiTietHoaDon = ?
+      `,
+      [chiTiet.maChiTietHoaDon],
+    );
+    chiTiet.toppings = toppingRows;
+  }
 
   return {
     statusCode: 200,
@@ -109,22 +123,27 @@ export const createHoaDonService = async (data, user) => {
   try {
     await connection.beginTransaction();
 
-    let tongtien = 0;
-    const chiTietItems = [];
+    // 1. Tạo hóa đơn với tongtien = 0, trigger sẽ tự tính sau
+    const [hoaDonResult] = await connection.query(
+      `
+      INSERT INTO HoaDon (ngaylap, tongtien, trangthaithanhtoan, MaNhanVien)
+      VALUES (NOW(), 0, ?, ?)
+      `,
+      [trangthaithanhtoan || "Chưa thanh toán", MaNhanVien],
+    );
 
+    const maHoaDon = hoaDonResult.insertId;
+
+    // 2. Thêm chi tiết hóa đơn cho từng món
     for (const item of items) {
+      // Kiểm tra đồ uống tồn tại và lấy giá
       const [drinkRows] = await connection.query(
-        `
-        SELECT maDoUong, donGia 
-        FROM DoUong 
-        WHERE maDoUong = ?
-        `,
+        "SELECT maDoUong, donGia FROM DoUong WHERE maDoUong = ?",
         [item.maDoUong],
       );
 
       if (drinkRows.length === 0) {
         await connection.rollback();
-
         return {
           statusCode: 404,
           data: { message: `Không tìm thấy đồ uống mã ${item.maDoUong}` },
@@ -132,61 +151,69 @@ export const createHoaDonService = async (data, user) => {
       }
 
       const soluong = Number(item.soluong || 1);
-      let toppingPrice = 0;
-      if (item.toppings) {
-        const toppingList = item.toppings.split(",").map((t) => t.trim());
-        for (const t of toppingList) {
-          if (TOPPINGS_PRICES[t]) {
-            toppingPrice += TOPPINGS_PRICES[t];
-          }
-        }
-      }
-      const dongia = Number(drinkRows[0].donGia) + toppingPrice;
-      const thanhtien = soluong * dongia;
+      const dongia = Number(drinkRows[0].donGia);
 
-      tongtien += thanhtien;
-
-      chiTietItems.push({
-        maDoUong: item.maDoUong,
-        soluong,
-        dongia,
-        thanhtien,
-        duong: item.duong,
-        da: item.da,
-        ghiChu: item.ghiChu || "",
-        toppings: item.toppings || "",
-      });
-    }
-
-    const [hoaDonResult] = await connection.query(
-      `
-      INSERT INTO HoaDon (ngaylap, tongtien, trangthaithanhtoan, MaNhanVien)
-      VALUES (CURDATE(), ?, ?, ?)
-      `,
-      [tongtien, trangthaithanhtoan || "Chưa thanh toán", MaNhanVien],
-    );
-
-    const maHoaDon = hoaDonResult.insertId;
-
-    for (const item of chiTietItems) {
-      await connection.query(
+      // INSERT ChiTietHoaDon — KHÔNG ghi thanhtien (cột GENERATED), KHÔNG ghi toppings (không tồn tại)
+      const [cthdResult] = await connection.query(
         `
         INSERT INTO ChiTietHoaDon 
-        (maHoaDon, maDoUong, soluong, dongia, duong, da, ghiChu, toppings)
+        (maHoaDon, maDoUong, soluong, dongia, duong, da, size, ghiChu)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           maHoaDon,
           item.maDoUong,
-          item.soluong,
-          item.dongia,
+          soluong,
+          dongia,
           item.duong || "100%",
           item.da || "100%",
-          item.ghiChu || "",
-          item.toppings || "",
+          item.size || "M",
+          item.ghiChu || null,
         ],
       );
+
+      const maChiTietHoaDon = cthdResult.insertId;
+
+      // 3. Thêm topping cho món này (nếu có)
+      // Frontend gửi dạng mảng: [{ maTopping, soLuong }]
+      if (Array.isArray(item.toppings) && item.toppings.length > 0) {
+        for (const tp of item.toppings) {
+          // Lấy giá topping từ bảng Topping
+          const [toppingRows] = await connection.query(
+            "SELECT maTopping, donGia FROM Topping WHERE maTopping = ?",
+            [tp.maTopping],
+          );
+
+          if (toppingRows.length === 0) {
+            await connection.rollback();
+            return {
+              statusCode: 404,
+              data: { message: `Không tìm thấy topping mã ${tp.maTopping}` },
+            };
+          }
+
+          // INSERT ChiTietTopping — trigger sẽ tự cập nhật tongTienTopping → thanhtien → tongtien
+          await connection.query(
+            `
+            INSERT INTO ChiTietTopping (maChiTietHoaDon, maTopping, soLuong, donGia)
+            VALUES (?, ?, ?, ?)
+            `,
+            [
+              maChiTietHoaDon,
+              tp.maTopping,
+              tp.soLuong || 1,
+              toppingRows[0].donGia,
+            ],
+          );
+        }
+      }
     }
+
+    // 4. Đọc lại tongtien (đã được trigger tự tính)
+    const [[hoaDon]] = await connection.query(
+      "SELECT tongtien FROM HoaDon WHERE maHoaDon = ?",
+      [maHoaDon],
+    );
 
     await connection.commit();
 
@@ -195,7 +222,7 @@ export const createHoaDonService = async (data, user) => {
       data: {
         message: "Tạo hóa đơn thành công",
         maHoaDon,
-        tongtien,
+        tongtien: hoaDon.tongtien,
       },
     };
   } catch (error) {
@@ -354,10 +381,13 @@ export const updateHoaDonService = async (maHoaDon, data, user) => {
       };
     }
 
-    // 2. Tính toán tổng tiền mới và xác thực các đồ uống
-    let tongtien = 0;
-    const chiTietItems = [];
+    // 2. Xóa chi tiết hóa đơn cũ (CASCADE sẽ tự xóa ChiTietTopping liên quan)
+    await connection.query(
+      "DELETE FROM ChiTietHoaDon WHERE maHoaDon = ?",
+      [maHoaDon]
+    );
 
+    // 3. Thêm chi tiết hóa đơn mới
     for (const item of items) {
       const [drinkRows] = await connection.query(
         "SELECT maDoUong, donGia FROM DoUong WHERE maDoUong = ?",
@@ -373,63 +403,77 @@ export const updateHoaDonService = async (maHoaDon, data, user) => {
       }
 
       const soluong = Number(item.soluong || 1);
-      let toppingPrice = 0;
-      if (item.toppings) {
-        const toppingList = item.toppings.split(",").map((t) => t.trim());
-        for (const t of toppingList) {
-          if (TOPPINGS_PRICES[t]) {
-            toppingPrice += TOPPINGS_PRICES[t];
-          }
-        }
-      }
-      const dongia = Number(drinkRows[0].donGia) + toppingPrice;
-      const thanhtien = soluong * dongia;
+      const dongia = Number(drinkRows[0].donGia);
 
-      tongtien += thanhtien;
-      chiTietItems.push({
-        maDoUong: item.maDoUong,
-        soluong,
-        dongia,
-        duong: item.duong,
-        da: item.da,
-        ghiChu: item.ghiChu || "",
-        toppings: item.toppings || "",
-      });
-    }
-
-    // 3. Xóa chi tiết hóa đơn cũ
-    await connection.query(
-      "DELETE FROM ChiTietHoaDon WHERE maHoaDon = ?",
-      [maHoaDon]
-    );
-
-    // 4. Thêm chi tiết hóa đơn mới
-    for (const item of chiTietItems) {
-      await connection.query(
-        "INSERT INTO ChiTietHoaDon (maHoaDon, maDoUong, soluong, dongia, duong, da, ghiChu, toppings) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      // INSERT ChiTietHoaDon — không ghi thanhtien (GENERATED), không ghi toppings
+      const [cthdResult] = await connection.query(
+        `
+        INSERT INTO ChiTietHoaDon 
+        (maHoaDon, maDoUong, soluong, dongia, duong, da, size, ghiChu)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
         [
           maHoaDon,
           item.maDoUong,
-          item.soluong,
-          item.dongia,
+          soluong,
+          dongia,
           item.duong || "100%",
           item.da || "100%",
-          item.ghiChu || "",
-          item.toppings || "",
+          item.size || "M",
+          item.ghiChu || null,
         ]
       );
+
+      const maChiTietHoaDon = cthdResult.insertId;
+
+      // Thêm topping (nếu có) — trigger sẽ tự tính tongTienTopping → thanhtien → tongtien
+      if (Array.isArray(item.toppings) && item.toppings.length > 0) {
+        for (const tp of item.toppings) {
+          const [toppingRows] = await connection.query(
+            "SELECT maTopping, donGia FROM Topping WHERE maTopping = ?",
+            [tp.maTopping]
+          );
+
+          if (toppingRows.length === 0) {
+            await connection.rollback();
+            return {
+              statusCode: 404,
+              data: { message: `Không tìm thấy topping mã ${tp.maTopping}` },
+            };
+          }
+
+          await connection.query(
+            `
+            INSERT INTO ChiTietTopping (maChiTietHoaDon, maTopping, soLuong, donGia)
+            VALUES (?, ?, ?, ?)
+            `,
+            [
+              maChiTietHoaDon,
+              tp.maTopping,
+              tp.soLuong || 1,
+              toppingRows[0].donGia,
+            ]
+          );
+        }
+      }
     }
 
-    // 5. Cập nhật tổng tiền và nhân viên thao tác trong HoaDon
+    // 4. Cập nhật nhân viên thao tác
     await connection.query(
-      "UPDATE HoaDon SET tongtien = ?, MaNhanVien = ? WHERE maHoaDon = ?",
-      [tongtien, MaNhanVien, maHoaDon]
+      "UPDATE HoaDon SET MaNhanVien = ? WHERE maHoaDon = ?",
+      [MaNhanVien, maHoaDon]
+    );
+
+    // 5. Đọc lại tongtien (trigger đã tự tính)
+    const [[hoaDon]] = await connection.query(
+      "SELECT tongtien FROM HoaDon WHERE maHoaDon = ?",
+      [maHoaDon]
     );
 
     await connection.commit();
     return {
       statusCode: 200,
-      data: { message: "Cập nhật hóa đơn thành công", tongtien },
+      data: { message: "Cập nhật hóa đơn thành công", tongtien: hoaDon.tongtien },
     };
   } catch (error) {
     await connection.rollback();
